@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
+from app.api.intent import router as intent_router
 
 class Settings(BaseSettings):
     APP_NAME: str = "MultiCloud Orchestrator"
@@ -29,7 +29,7 @@ app = FastAPI(
     debug=settings.DEBUG
 )
 
-
+app.include_router(intent_router)
 # Allow the React frontend to communicate with FastAPI.
 
 app.add_middleware(

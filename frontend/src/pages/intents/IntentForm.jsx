@@ -1,364 +1,331 @@
 
-import { useState } from 'react'
+import { useState } from "react";
 import {
-  ArrowLeft,
-  ArrowRight,
-  BrainCircuit,
-  Cpu,
-  HardDrive,
-  Network,
-  Wallet,
+  AlertCircle,
   CheckCircle2,
-  Info,
-  Server,
-  RotateCcw,
-  Cloud,
-} from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+  LoaderCircle,
+  Send,
+} from "lucide-react";
+
+import { validateIntent } from "../../services/intentService";
+
+const initialFormData = {
+  description: "",
+  workload: "Web Application",
+  users: 1000,
+  cpu: 2,
+  ram: 4,
+  storage: 50,
+  budget: 10000,
+  currency: "INR",
+  region: "ap-south-1",
+  latency: "Low",
+  availability: "High",
+  providers: ["AWS", "Azure", "GCP"],
+};
 
 function IntentForm() {
-  const navigate = useNavigate()
+  const [formData, setFormData] = useState(initialFormData);
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
+  const [submitted, setSubmitted] = useState(null);
 
-  const [description, setDescription] = useState('')
-  const [submitted, setSubmitted] = useState(null)
+  const handleChange = (event) => {
+    const { name, value } = event.target;
 
-  const [formData, setFormData] = useState({
-    workload: 'Web Application',
-    users: '10000',
-    cpu: '4',
-    ram: '8',
-    storage: '200',
-    budget: '15000',
-    currency: 'INR',
-    region: 'Asia Pacific',
-    latency: 'Low',
-    availability: 'High',
-    providers: ['AWS', 'Azure', 'GCP'],
-  })
-
-  const updateField = (field, value) => {
     setFormData((previous) => ({
       ...previous,
-      [field]: value,
-    }))
-  }
+      [name]: value,
+    }));
 
-  const toggleProvider = (provider) => {
-    setFormData((previous) => ({
-      ...previous,
-      providers: previous.providers.includes(provider)
-        ? previous.providers.filter((item) => item !== provider)
-        : [...previous.providers, provider],
-    }))
-  }
+    setApiError("");
+    setSubmitted(null);
+  };
 
-  const handleSubmit = (event) => {
-    event.preventDefault()
+  const handleProviderChange = (provider) => {
+    setFormData((previous) => {
+      const isSelected = previous.providers.includes(provider);
 
-    if (!description.trim()) {
-      return
+      return {
+        ...previous,
+        providers: isSelected
+          ? previous.providers.filter((item) => item !== provider)
+          : [...previous.providers, provider],
+      };
+    });
+
+    setApiError("");
+    setSubmitted(null);
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    setApiError("");
+    setSubmitted(null);
+
+    if (formData.description.trim().length < 20) {
+      setApiError(
+        "Please provide an intent description with at least 20 characters."
+      );
+      return;
     }
 
     if (formData.providers.length === 0) {
-      alert('Please select at least one cloud provider.')
-      return
+      setApiError("Please select at least one cloud provider.");
+      return;
     }
 
-    setSubmitted({
-      description,
+    const payload = {
       ...formData,
-    })
-  }
+      description: formData.description.trim(),
+      users: Number(formData.users),
+      cpu: Number(formData.cpu),
+      ram: Number(formData.ram),
+      storage: Number(formData.storage),
+      budget: Number(formData.budget),
+    };
 
-  const resetForm = () => {
-    setDescription('')
-    setSubmitted(null)
+    setLoading(true);
 
-    setFormData({
-      workload: 'Web Application',
-      users: '10000',
-      cpu: '4',
-      ram: '8',
-      storage: '200',
-      budget: '15000',
-      currency: 'INR',
-      region: 'Asia Pacific',
-      latency: 'Low',
-      availability: 'High',
-      providers: ['AWS', 'Azure', 'GCP'],
-    })
-  }
+    try {
+      const response = await validateIntent(payload);
+setSubmitted(response);
+    } catch (error) {
+      const message =
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        error.message ||
+        "Unable to connect to the backend. Please try again.";
+
+      setApiError(
+        Array.isArray(message)
+          ? message.map((item) => item.msg).join(", ")
+          : message
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputClass =
+    "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+  const labelClass =
+    "mb-1.5 block text-sm font-medium text-slate-700";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-7">
-
-      {/* HEADER */}
-
+    <div className="mx-auto max-w-5xl space-y-6">
+      {/* Page heading */}
       <div>
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="mb-5 flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600"
-        >
-          <ArrowLeft size={17} />
-          Back to Dashboard
-        </button>
+        <h1 className="text-2xl font-bold text-slate-900">
+          Create Cloud Intent
+        </h1>
 
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
-            <BrainCircuit size={25} />
-          </div>
-
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Create Infrastructure Intent
-            </h1>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Describe your infrastructure requirements in natural language.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* INFORMATION */}
-
-      <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
-        <Info size={20} className="mt-0.5 shrink-0 text-blue-600" />
-
-        <p className="text-sm leading-6 text-blue-800">
-          Provide your application requirements below. The system will
-          prepare them for structured intent extraction and multi-cloud
-          analysis.
+        <p className="mt-1 text-sm text-slate-500">
+          Describe your workload requirements and define your cloud
+          infrastructure preferences.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-
-        {/* NATURAL LANGUAGE INPUT */}
-
+        {/* Natural language intent */}
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Intent Description
+            </h2>
 
-          <div className="mb-5 flex items-center gap-3">
-            <div className="rounded-lg bg-violet-50 p-2.5 text-violet-600">
-              <BrainCircuit size={21} />
-            </div>
-
-            <div>
-              <h2 className="font-semibold text-slate-900">
-                Natural Language Requirements
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Explain what you want to deploy.
-              </p>
-            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Explain what you want your cloud infrastructure to do.
+            </p>
           </div>
 
-          <label className="mb-2 block text-sm font-medium text-slate-700">
-            Infrastructure Description
-            <span className="ml-1 text-red-500">*</span>
+          <label htmlFor="description" className={labelClass}>
+            Describe your workload
           </label>
 
           <textarea
-            required
+            id="description"
+            name="description"
+            rows={5}
+            value={formData.description}
+            onChange={handleChange}
+            placeholder="Example: I want to host an e-commerce application for 5,000 users. It should have high availability, low latency, 8 GB RAM, 4 CPU cores, and 200 GB storage. My monthly budget is ₹20,000."
+            className={inputClass}
             minLength={20}
-            rows={6}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="Example: I want to deploy an e-commerce application supporting 10,000 users. It should have 4 CPU cores, 8 GB RAM, 200 GB storage, high availability and low latency. My monthly budget is ₹15,000."
-            className="w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+            maxLength={5000}
+            required
           />
 
-          <div className="mt-2 flex justify-between text-xs text-slate-400">
-            <span>Include your workload and technical requirements.</span>
-            <span>{description.length} characters</span>
-          </div>
-
+          <p className="mt-1 text-right text-xs text-slate-400">
+            {formData.description.length}/5000 characters
+          </p>
         </section>
 
-        {/* WORKLOAD DETAILS */}
-
+        {/* Workload requirements */}
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Workload Requirements
+            </h2>
 
-          <div className="mb-6 flex items-center gap-3">
-            <div className="rounded-lg bg-blue-50 p-2.5 text-blue-600">
-              <Server size={21} />
-            </div>
-
-            <div>
-              <h2 className="font-semibold text-slate-900">
-                Workload Requirements
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Specify the expected application workload.
-              </p>
-            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Specify the infrastructure resources required.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Application Type
+              <label htmlFor="workload" className={labelClass}>
+                Workload Type
               </label>
 
               <select
+                id="workload"
+                name="workload"
                 value={formData.workload}
-                onChange={(e) => updateField('workload', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500"
+                onChange={handleChange}
+                className={inputClass}
               >
                 <option>Web Application</option>
-                <option>E-commerce</option>
-                <option>Mobile Backend</option>
-                <option>Data Processing</option>
+                <option>Mobile Application</option>
                 <option>Machine Learning</option>
-                <option>Database Workload</option>
+                <option>Data Analytics</option>
+                <option>Database</option>
                 <option>Microservices</option>
+                <option>Storage Workload</option>
                 <option>Other</option>
               </select>
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label htmlFor="users" className={labelClass}>
                 Expected Users
               </label>
 
               <input
+                id="users"
+                name="users"
                 type="number"
                 min="1"
-                required
                 value={formData.users}
-                onChange={(e) => updateField('users', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-500"
+                onChange={handleChange}
+                className={inputClass}
+                required
               />
             </div>
 
-          </div>
-
-        </section>
-
-        {/* COMPUTE AND STORAGE */}
-
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-
-          <div className="mb-6 flex items-center gap-3">
-            <div className="rounded-lg bg-emerald-50 p-2.5 text-emerald-600">
-              <Cpu size={21} />
-            </div>
-
             <div>
-              <h2 className="font-semibold text-slate-900">
-                Compute and Storage
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Define the minimum infrastructure requirements.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label htmlFor="cpu" className={labelClass}>
                 CPU Cores
               </label>
 
               <input
+                id="cpu"
+                name="cpu"
                 type="number"
                 min="1"
-                required
+                max="1024"
                 value={formData.cpu}
-                onChange={(e) => updateField('cpu', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-500"
+                onChange={handleChange}
+                className={inputClass}
+                required
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label htmlFor="ram" className={labelClass}>
                 RAM (GB)
               </label>
 
               <input
+                id="ram"
+                name="ram"
                 type="number"
                 min="1"
-                required
+                max="16384"
                 value={formData.ram}
-                onChange={(e) => updateField('ram', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-500"
+                onChange={handleChange}
+                className={inputClass}
+                required
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Storage Capacity (GB)
+              <label htmlFor="storage" className={labelClass}>
+                Storage (GB)
               </label>
 
               <input
+                id="storage"
+                name="storage"
                 type="number"
                 min="1"
-                required
+                max="10000000"
                 value={formData.storage}
-                onChange={(e) => updateField('storage', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-500"
+                onChange={handleChange}
+                className={inputClass}
+                required
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label htmlFor="region" className={labelClass}>
                 Preferred Region
               </label>
 
               <select
+                id="region"
+                name="region"
                 value={formData.region}
-                onChange={(e) => updateField('region', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500"
+                onChange={handleChange}
+                className={inputClass}
               >
-                <option>Asia Pacific</option>
-                <option>India</option>
-                <option>Europe</option>
-                <option>North America</option>
-                <option>South America</option>
-                <option>Any Available Region</option>
+                <option value="ap-south-1">
+                  Asia Pacific (Mumbai)
+                </option>
+                <option value="ap-south-2">
+                  Asia Pacific (Hyderabad)
+                </option>
+                <option value="ap-southeast-1">
+                  Asia Pacific (Singapore)
+                </option>
+                <option value="us-east-1">
+                  US East (N. Virginia)
+                </option>
+                <option value="eu-west-1">
+                  Europe (Ireland)
+                </option>
               </select>
             </div>
-
           </div>
-
         </section>
 
-        {/* NETWORK REQUIREMENTS */}
-
+        {/* Performance and availability */}
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Performance Requirements
+            </h2>
 
-          <div className="mb-6 flex items-center gap-3">
-            <div className="rounded-lg bg-indigo-50 p-2.5 text-indigo-600">
-              <Network size={21} />
-            </div>
-
-            <div>
-              <h2 className="font-semibold text-slate-900">
-                Network Requirements
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Define network performance and availability preferences.
-              </p>
-            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Define your workload's performance and availability needs.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Latency Preference
+              <label htmlFor="latency" className={labelClass}>
+                Latency Requirement
               </label>
 
               <select
+                id="latency"
+                name="latency"
                 value={formData.latency}
-                onChange={(e) => updateField('latency', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500"
+                onChange={handleChange}
+                className={inputClass}
               >
                 <option>Very Low</option>
                 <option>Low</option>
@@ -368,14 +335,16 @@ function IntentForm() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label htmlFor="availability" className={labelClass}>
                 Availability Requirement
               </label>
 
               <select
+                id="availability"
+                name="availability"
                 value={formData.availability}
-                onChange={(e) => updateField('availability', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500"
+                onChange={handleChange}
+                className={inputClass}
               >
                 <option>Basic</option>
                 <option>High</option>
@@ -383,225 +352,169 @@ function IntentForm() {
                 <option>Mission Critical</option>
               </select>
             </div>
-
           </div>
-
         </section>
 
-        {/* BUDGET */}
-
+        {/* Budget and cloud providers */}
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Budget and Cloud Preferences
+            </h2>
 
-          <div className="mb-6 flex items-center gap-3">
-            <div className="rounded-lg bg-amber-50 p-2.5 text-amber-600">
-              <Wallet size={21} />
-            </div>
-
-            <div>
-              <h2 className="font-semibold text-slate-900">
-                Budget Constraints
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Define your maximum monthly infrastructure budget.
-              </p>
-            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Set your monthly budget and select the providers to compare.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label htmlFor="budget" className={labelClass}>
                 Monthly Budget
               </label>
 
               <input
+                id="budget"
+                name="budget"
                 type="number"
-                min="1"
-                required
+                min="0.01"
+                step="0.01"
                 value={formData.budget}
-                onChange={(e) => updateField('budget', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-500"
+                onChange={handleChange}
+                className={inputClass}
+                required
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label htmlFor="currency" className={labelClass}>
                 Currency
               </label>
 
               <select
+                id="currency"
+                name="currency"
                 value={formData.currency}
-                onChange={(e) => updateField('currency', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500"
+                onChange={handleChange}
+                className={inputClass}
               >
-                <option value="INR">INR - Indian Rupee</option>
-                <option value="USD">USD - US Dollar</option>
-                <option value="EUR">EUR - Euro</option>
-                <option value="GBP">GBP - British Pound</option>
+                <option value="INR">INR (₹)</option>
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
               </select>
             </div>
-
           </div>
 
+          <div className="mt-6">
+            <label className={labelClass}>
+              Cloud Providers
+            </label>
+
+            <p className="mb-3 text-xs text-slate-500">
+              Select one or more providers for the orchestration process.
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {["AWS", "Azure", "GCP"].map((provider) => {
+                const selected = formData.providers.includes(provider);
+
+                return (
+                  <label
+                    key={provider}
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition ${
+                      selected
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => handleProviderChange(provider)}
+                      className="h-4 w-4 accent-blue-600"
+                    />
+
+                    <span className="text-sm font-medium text-slate-800">
+                      {provider}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
         </section>
 
-        {/* PROVIDER PREFERENCE */}
-
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-
-          <div className="mb-5 flex items-center gap-3">
-            <div className="rounded-lg bg-blue-50 p-2.5 text-blue-600">
-              <Cloud size={21} />
-            </div>
-
-            <div>
-              <h2 className="font-semibold text-slate-900">
-                Cloud Provider Preferences
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Select the providers you want the system to evaluate.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-
-            {['AWS', 'Azure', 'GCP'].map((provider) => (
-
-              <label
-                key={provider}
-                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition ${
-                  formData.providers.includes(provider)
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-slate-200 hover:border-slate-300'
-                }`}
-              >
-
-                <input
-                  type="checkbox"
-                  checked={formData.providers.includes(provider)}
-                  onChange={() => toggleProvider(provider)}
-                  className="h-4 w-4 accent-blue-600"
-                />
-
-                <span className="text-sm font-semibold text-slate-700">
-                  {provider}
-                </span>
-
-              </label>
-
-            ))}
-
-          </div>
-
-        </section>
-
-        {/* SUBMIT */}
-
-        <div className="flex flex-col-reverse justify-between gap-3 sm:flex-row">
-
-          <button
-            type="button"
-            onClick={resetForm}
-            className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        {/* API error */}
+        {apiError && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
           >
-            <RotateCcw size={16} />
-            Reset Form
-          </button>
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
 
+            <p>{apiError}</p>
+          </div>
+        )}
+
+        {/* Submit button */}
+        <div className="flex justify-end">
           <button
             type="submit"
-            className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Validate Requirements
-            <ArrowRight size={17} />
+            {loading ? (
+              <>
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                Validating...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4" />
+                Validate Intent
+              </>
+            )}
           </button>
-
         </div>
-
       </form>
 
-      {/* LOCAL VALIDATION RESULT */}
-
+      {/* Backend response */}
       {submitted && (
+        <section className="rounded-xl border border-green-200 bg-green-50 p-6">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-green-600" />
 
-        <section className="rounded-xl border border-emerald-200 bg-white p-6 shadow-sm">
-
-          <div className="flex items-start gap-3">
-
-            <CheckCircle2 size={24} className="shrink-0 text-emerald-600" />
-
-            <div>
-              <h2 className="font-semibold text-slate-900">
-                Requirements captured successfully
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Your form passed the browser's basic validation.
-                No LLM processing or cloud analysis has been performed yet.
-              </p>
-            </div>
-
+            <h2 className="text-lg font-semibold text-green-800">
+              Intent Validated Successfully
+            </h2>
           </div>
 
-          <div className="mt-6 rounded-lg bg-slate-50 p-4">
+          <p className="mt-2 text-sm text-green-700">
+            {submitted.message}
+          </p>
 
-            <h3 className="text-sm font-semibold text-slate-800">
-              Intent Summary
-            </h3>
-
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              {submitted.description}
+          <div className="mt-4 rounded-lg border border-green-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Validation Status
             </p>
 
-            <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <p className="mt-1 text-sm font-semibold text-green-700">
+              {submitted.validation_status}
+            </p>
 
-              {[
-                ['Workload', submitted.workload],
-                ['Expected Users', submitted.users],
-                ['CPU Cores', submitted.cpu],
-                ['RAM', `${submitted.ram} GB`],
-                ['Storage', `${submitted.storage} GB`],
-                ['Monthly Budget', `${submitted.currency} ${submitted.budget}`],
-                ['Region', submitted.region],
-                ['Latency', submitted.latency],
-                ['Availability', submitted.availability],
-                ['Providers', submitted.providers.join(', ')],
-              ].map(([label, value]) => (
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Submitted Intent
+            </p>
 
-                <div key={label}>
-                  <p className="text-xs text-slate-400">{label}</p>
-                  <p className="mt-1 break-words text-sm font-semibold text-slate-800">
-                    {value}
-                  </p>
-                </div>
-
-              ))}
-
-            </div>
-
+            <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs leading-6 text-green-300">
+              {JSON.stringify(submitted.intent, null, 2)}
+            </pre>
           </div>
-
-          <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
-            <p className="text-sm font-semibold text-amber-800">
-              Next stage: LLM processing
-            </p>
-
-            <p className="mt-1 text-xs leading-5 text-amber-700">
-              This intent is currently held in browser memory only.
-              Backend persistence, LLM extraction and cloud resource
-              evaluation will be implemented in subsequent stages.
-            </p>
-          </div>
-
         </section>
-
       )}
-
     </div>
-  )
+  );
 }
 
-export default IntentForm
+export default IntentForm;
