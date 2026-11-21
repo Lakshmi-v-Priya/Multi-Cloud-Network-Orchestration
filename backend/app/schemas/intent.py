@@ -1,7 +1,7 @@
 
 from typing import Literal
 from pydantic import BaseModel, Field, ConfigDict
-
+from datetime import datetime
 
 class IntentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -48,3 +48,20 @@ class IntentResponse(BaseModel):
     message: str
     intent: IntentRequest
     validation_status: str
+class SavedIntentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    description: str
+    workload: str
+    users: int
+    cpu: int
+    ram: int
+    storage: int
+    budget: float
+    currency: str
+    region: str
+    latency: str
+    availability: str
+    providers: list[str]
+    created_at: datetime

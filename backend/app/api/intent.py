@@ -4,7 +4,11 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.intent import Intent
-from app.schemas.intent import IntentRequest, IntentResponse
+from app.schemas.intent import (
+    IntentRequest,
+    IntentResponse,
+    SavedIntentResponse,
+)
 from app.services.intent_service import validate_intent
 
 router = APIRouter(
@@ -18,10 +22,9 @@ def validate_intent_endpoint(
     data: IntentRequest,
     db: Session = Depends(get_db),
 ):
-    # Step 1: Validate the submitted intent
+    # Validate the submitted intent
     result = validate_intent(data)
 
-    # Step 2: Save only if validation succeeds
     if not result.success:
         return result
 
@@ -29,7 +32,7 @@ def validate_intent_endpoint(
         # Convert request data into a database model
         intent_record = Intent(**data.model_dump())
 
-        # Save it to PostgreSQL
+        # Save to PostgreSQL
         db.add(intent_record)
         db.commit()
         db.refresh(intent_record)
@@ -41,4 +44,21 @@ def validate_intent_endpoint(
         raise HTTPException(
             status_code=500,
             detail="Intent validation succeeded, but saving to database failed.",
+        ) from error
+
+
+@router.get("/", response_model=list[SavedIntentResponse])
+def get_saved_intents(db: Session = Depends(get_db)):
+    try:
+        intents = (
+            db.query(Intent)
+            .order_by(Intent.id.desc())
+            .all()
+        )
+        return intents
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve saved intents.",
         ) from error
