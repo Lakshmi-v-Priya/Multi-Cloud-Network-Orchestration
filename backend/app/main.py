@@ -29,7 +29,7 @@ app = FastAPI(
     debug=settings.DEBUG
 )
 
-app.include_router(intent_router)
+app.include_router(intent_router, prefix="/api/v1")
 # Allow the React frontend to communicate with FastAPI.
 
 app.add_middleware(
