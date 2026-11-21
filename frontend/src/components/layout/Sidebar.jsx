@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
   MessageSquareText,
+  ClipboardList,
   Cloud,
   Calculator,
   BrainCircuit,
@@ -21,6 +22,7 @@ const navigation = [
     items: [
       { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
       { name: 'New Intent', path: '/intents/new', icon: MessageSquareText },
+      { name: 'Saved Intents', path: '/intents', icon: ClipboardList },
       { name: 'Cloud Comparison', path: '/comparison', icon: Cloud },
       { name: 'Cost Analysis', path: '/cost-analysis', icon: Calculator },
       { name: 'Optimization', path: '/optimization', icon: BrainCircuit },

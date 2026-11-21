@@ -4,6 +4,7 @@ import IntentForm from './pages/intents/IntentForm'
 import AppLayout from './components/layout/AppLayout'
 import Dashboard from './pages/dashboard/Dashboard'
 import PagePlaceholder from './pages/PagePlaceholder'
+import IntentList from './pages/intents/IntentList'
 
 const modulePages = [
   {
@@ -57,6 +58,7 @@ function App() {
   return (
     <AppLayout>
       <Routes>
+        <Route path="/intents" element={<IntentList />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/intents/new" element={<IntentForm />} />
         <Route path="/dashboard" element={<Dashboard />} />

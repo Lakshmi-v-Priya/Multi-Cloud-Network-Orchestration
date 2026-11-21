@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.api.intent import router as intent_router
+from app.api.comparison import router as comparison_router
 
 class Settings(BaseSettings):
     APP_NAME: str = "MultiCloud Orchestrator"
@@ -30,6 +31,7 @@ app = FastAPI(
 )
 
 app.include_router(intent_router, prefix="/api/v1")
+app.include_router(comparison_router, prefix="/api/v1")
 # Allow the React frontend to communicate with FastAPI.
 
 app.add_middleware(
