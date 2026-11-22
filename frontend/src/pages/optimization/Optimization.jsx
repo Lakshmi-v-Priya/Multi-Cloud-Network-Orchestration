@@ -104,8 +104,9 @@ function Optimization() {
           Cloud Optimization
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Evaluate cloud providers based on cost efficiency and budget
-          compliance to identify the most suitable infrastructure option.
+          Evaluate cloud providers using weighted cost, budget,
+          latency and availability criteria to identify the most
+          suitable infrastructure option.
         </p>
       </div>
 
@@ -281,8 +282,9 @@ function Optimization() {
             </h2>
 
             <p className="mt-1 text-sm text-gray-500">
-              Providers are ranked by their optimization score.
-              Budget compliance and cost efficiency determine the score.
+              Providers are ranked using a weighted score based on
+              cost efficiency, budget compliance, latency suitability
+              and availability suitability.
             </p>
 
             <div className="mt-4 space-y-4">
@@ -393,6 +395,68 @@ function Optimization() {
                           width: `${candidate.optimization_score}%`,
                         }}
                       />
+                    </div>
+                  </div>
+                  
+                  {/* Multi-Objective Score Breakdown */}
+                  <div className="mt-5 rounded-lg border border-gray-200 p-4">
+                    <h4 className="text-sm font-semibold text-gray-800">
+                      Multi-Objective Score Breakdown
+                    </h4>
+
+                    <div className="mt-4 space-y-4">
+                      {[
+                        {
+                          label: "Cost Efficiency",
+                          score: candidate.cost_score,
+                          max: 35,
+                        },
+                        {
+                          label: "Budget Compliance",
+                          score: candidate.budget_score,
+                          max: 25,
+                        },
+                        {
+                          label: "Latency Suitability",
+                          score: candidate.latency_score,
+                          max: 20,
+                        },
+                        {
+                          label: "Availability Suitability",
+                          score: candidate.availability_score,
+                          max: 20,
+                        },
+                      ].map((item) => (
+                        <div key={item.label}>
+                          <div className="mb-1 flex justify-between text-xs">
+                            <span className="font-medium text-gray-700">
+                              {item.label}
+                            </span>
+
+                            <span className="text-gray-500">
+                              {item.score} / {item.max}
+                            </span>
+                          </div>
+
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-blue-500 transition-all"
+                              style={{
+                                width: `${(item.score / item.max) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 border-t border-gray-100 pt-3">
+                      <div className="flex justify-between text-sm font-semibold text-gray-800">
+                        <span>Total Weighted Score</span>
+                        <span>
+                          {candidate.optimization_score} / 100
+                        </span>
+                      </div>
                     </div>
                   </div>
 

@@ -14,6 +14,13 @@ class OptimizationCandidate(BaseModel):
     within_budget: bool
     cost_rank: int = Field(ge=1)
 
+    # Individual weighted score contributions
+    cost_score: float = Field(ge=0, le=35)
+    budget_score: float = Field(ge=0, le=25)
+    latency_score: float = Field(ge=0, le=20)
+    availability_score: float = Field(ge=0, le=20)
+
+    # Final combined score
     optimization_score: float = Field(ge=0, le=100)
 
     recommendation: str
@@ -37,6 +44,7 @@ class OptimizationResponse(BaseModel):
     is_simulation: bool = True
     disclaimer: str = (
         "Recommendations are based on illustrative demo pricing "
-        "and simulated evaluation. They do not represent live "
-        "cloud pricing or actual deployed infrastructure."
+        "and simulated cost, latency, availability and budget "
+        "evaluation. They do not represent live cloud pricing, "
+        "measured performance or actual deployed infrastructure."
     )
