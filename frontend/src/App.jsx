@@ -1,4 +1,3 @@
-
 import { Routes, Route, Navigate } from 'react-router-dom'
 import IntentForm from './pages/intents/IntentForm'
 import AppLayout from './components/layout/AppLayout'
@@ -6,17 +5,13 @@ import Dashboard from './pages/dashboard/Dashboard'
 import PagePlaceholder from './pages/PagePlaceholder'
 import IntentList from './pages/intents/IntentList'
 import Comparison from './pages/comparison/Comparison'
+import CostAnalysis from './pages/cost-analysis/CostAnalysis'
 
 const modulePages = [
   {
     path: '/intents/new',
     title: 'Intent Management',
     description: 'Submit natural-language infrastructure requirements and manage your intents.',
-  },
-  {
-    path: '/cost-analysis',
-    title: 'Cost Analysis',
-    description: 'Evaluate infrastructure and network expenditure across cloud providers.',
   },
   {
     path: '/optimization',
@@ -59,6 +54,7 @@ function App() {
         <Route path="/intents/new" element={<IntentForm />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/comparison" element={<Comparison />} />
+        <Route path="/cost-analysis" element={<CostAnalysis />} />
 
         {modulePages.map((page) => (
           <Route
