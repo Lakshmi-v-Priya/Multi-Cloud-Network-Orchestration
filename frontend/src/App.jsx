@@ -7,6 +7,7 @@ import IntentList from './pages/intents/IntentList'
 import Comparison from './pages/comparison/Comparison'
 import CostAnalysis from './pages/cost-analysis/CostAnalysis'
 import Optimization from './pages/optimization/Optimization'
+import Orchestration from './pages/orchestration/Orchestration'
 
 const modulePages = [
   {
@@ -18,6 +19,11 @@ const modulePages = [
     path: '/networking',
     title: 'Network Topology',
     description: 'Plan network architecture and connectivity across multiple cloud providers.',
+  },
+  {
+    path: '/orchestration',
+    title: 'Orchestration Planning',
+    description: 'Generate infrastructure plans based on optimized cloud provider selections.',
   },
   {
     path: '/deployments',
@@ -52,7 +58,8 @@ function App() {
         <Route path="/comparison" element={<Comparison />} />
         <Route path="/cost-analysis" element={<CostAnalysis />} />
         <Route path="/optimization" element={<Optimization />} />
-
+        <Route path="/orchestration" element={<Orchestration />} />
+        
         {modulePages.map((page) => (
           <Route
             key={page.path}

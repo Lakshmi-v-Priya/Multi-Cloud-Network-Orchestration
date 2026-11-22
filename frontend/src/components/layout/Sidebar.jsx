@@ -13,6 +13,7 @@ import {
   FileBarChart,
   Settings,
   ShieldCheck,
+  Workflow,
   X
 } from 'lucide-react'
 
@@ -29,13 +30,14 @@ const navigation = [
     ],
   },
   {
-    title: 'INFRASTRUCTURE',
-    items: [
-      { name: 'Network Topology', path: '/networking', icon: Network },
-      { name: 'Deployments', path: '/deployments', icon: Server },
-      { name: 'Monitoring', path: '/monitoring', icon: Activity },
-    ],
-  },
+  title: 'INFRASTRUCTURE',
+  items: [
+    { name: 'Network Topology', path: '/networking', icon: Network },
+    { name: 'Orchestration', path: '/orchestration', icon: Workflow },
+    { name: 'Deployments', path: '/deployments', icon: Server },
+    { name: 'Monitoring', path: '/monitoring', icon: Activity },
+  ],
+},
   {
     title: 'MANAGEMENT',
     items: [
