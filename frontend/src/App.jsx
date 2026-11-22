@@ -6,17 +6,13 @@ import PagePlaceholder from './pages/PagePlaceholder'
 import IntentList from './pages/intents/IntentList'
 import Comparison from './pages/comparison/Comparison'
 import CostAnalysis from './pages/cost-analysis/CostAnalysis'
+import Optimization from './pages/optimization/Optimization'
 
 const modulePages = [
   {
     path: '/intents/new',
     title: 'Intent Management',
     description: 'Submit natural-language infrastructure requirements and manage your intents.',
-  },
-  {
-    path: '/optimization',
-    title: 'Intelligent Optimization',
-    description: 'Optimize infrastructure based on cost, latency, availability and performance.',
   },
   {
     path: '/networking',
@@ -55,6 +51,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/comparison" element={<Comparison />} />
         <Route path="/cost-analysis" element={<CostAnalysis />} />
+        <Route path="/optimization" element={<Optimization />} />
 
         {modulePages.map((page) => (
           <Route
