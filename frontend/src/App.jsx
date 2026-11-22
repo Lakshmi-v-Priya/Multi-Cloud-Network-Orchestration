@@ -5,17 +5,13 @@ import AppLayout from './components/layout/AppLayout'
 import Dashboard from './pages/dashboard/Dashboard'
 import PagePlaceholder from './pages/PagePlaceholder'
 import IntentList from './pages/intents/IntentList'
+import Comparison from './pages/comparison/Comparison'
 
 const modulePages = [
   {
     path: '/intents/new',
     title: 'Intent Management',
     description: 'Submit natural-language infrastructure requirements and manage your intents.',
-  },
-  {
-    path: '/comparison',
-    title: 'Multi-Cloud Comparison',
-    description: 'Compare AWS, Microsoft Azure and Google Cloud resources.',
   },
   {
     path: '/cost-analysis',
@@ -62,6 +58,7 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/intents/new" element={<IntentForm />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/comparison" element={<Comparison />} />
 
         {modulePages.map((page) => (
           <Route
