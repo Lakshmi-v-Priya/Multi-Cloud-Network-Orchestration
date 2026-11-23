@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import {
   Cloud,
@@ -12,16 +11,22 @@ import {
   AlertCircle,
   CheckCircle2,
   ClipboardCheck,
+  Code2,
+  Copy,
+  Download,
 } from "lucide-react";
 
 import { getSavedIntents } from "../../services/intentService";
-import { prepareDeployment } from "../../services/deploymentService";
+import { prepareDeployment, generateTerraform } from "../../services/deploymentService";
 
 function Deployment() {
   const [intents, setIntents] = useState([]);
   const [selectedIntentId, setSelectedIntentId] = useState("");
   const [provider, setProvider] = useState("AWS");
   const [deploymentData, setDeploymentData] = useState(null);
+  const [terraformData, setTerraformData] = useState(null);
+  const [generatingTerraform, setGeneratingTerraform] = useState(false);
+  const [terraformError, setTerraformError] = useState("");
 
   const [loadingIntents, setLoadingIntents] = useState(true);
   const [preparing, setPreparing] = useState(false);
@@ -70,6 +75,53 @@ function Deployment() {
     } finally {
       setPreparing(false);
     }
+  };
+
+  // Generate Terraform configuration
+  const handleGenerateTerraform = async () => {
+    if (!selectedIntentId) {
+      setTerraformError("Please select an infrastructure intent.");
+      return;
+    }
+
+    try {
+      setTerraformError("");
+      setTerraformData(null);
+      setGeneratingTerraform(true);
+      const data = await generateTerraform(selectedIntentId, provider);
+      setTerraformData(data);
+    } catch (err) {
+      setTerraformError(
+        err.response?.data?.detail || "Failed to generate Terraform configuration."
+      );
+    } finally {
+      setGeneratingTerraform(false);
+    }
+  };
+
+  const handleCopyTerraform = async () => {
+    const code = terraformData?.terraform_code;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setTerraformError("");
+    } catch {
+      setTerraformError("Unable to copy Terraform code. Please copy it manually.");
+    }
+  };
+
+  const handleDownloadTerraform = () => {
+    const code = terraformData?.terraform_code;
+    if (!code) return;
+    const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = terraformData.file_name || "main.tf";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   // Currency formatting
@@ -156,6 +208,8 @@ function Deployment() {
               onChange={(e) => {
                 setSelectedIntentId(e.target.value);
                 setDeploymentData(null);
+                setTerraformData(null);
+                setTerraformError("");
                 setError("");
               }}
               disabled={loadingIntents}
@@ -186,6 +240,8 @@ function Deployment() {
               onChange={(e) => {
                 setProvider(e.target.value);
                 setDeploymentData(null);
+                setTerraformData(null);
+                setTerraformError("");
                 setError("");
               }}
               className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -272,8 +328,8 @@ function Deployment() {
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  {deploymentData.workload} · Intent #
-                  {deploymentData.intent_id} · {deploymentData.region}
+                  {deploymentData.workload} Â· Intent #
+                  {deploymentData.intent_id} Â· {deploymentData.region}
                 </p>
               </div>
 
@@ -496,6 +552,57 @@ function Deployment() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Terraform Generation and Preview */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Terraform Configuration</h2>
+                <p className="mt-1 text-sm text-gray-500">Generate, preview, copy, or download infrastructure code for the selected provider.</p>
+              </div>
+              <button
+                onClick={handleGenerateTerraform}
+                disabled={generatingTerraform}
+                className="flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {generatingTerraform ? (
+                  <> <LoaderCircle className="h-4 w-4 animate-spin" /> Generating Terraform... </>
+                ) : (
+                  <> <Code2 className="h-4 w-4" /> Generate Terraform </>
+                )}
+              </button>
+            </div>
+
+            {terraformError && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <p>{terraformError}</p>
+              </div>
+            )}
+
+            {terraformData?.terraform_code && (
+              <div className="mt-5 overflow-hidden rounded-xl border border-gray-200">
+                <div className="flex flex-col gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <Code2 className="h-4 w-4" />
+                    <span>{terraformData.file_name || "main.tf"}</span>
+                    <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">Simulation output</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleCopyTerraform} className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                      <Copy className="h-4 w-4" /> Copy
+                    </button>
+                    <button onClick={handleDownloadTerraform} className="flex items-center gap-2 rounded-md bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-900">
+                      <Download className="h-4 w-4" /> Download .tf
+                    </button>
+                  </div>
+                </div>
+                <pre className="max-h-[600px] overflow-auto bg-gray-950 p-4 text-xs leading-5 text-gray-100 sm:text-sm">
+                  <code>{terraformData.terraform_code}</code>
+                </pre>
+              </div>
+            )}
           </div>
 
           {/* Simulation Disclaimer */}
