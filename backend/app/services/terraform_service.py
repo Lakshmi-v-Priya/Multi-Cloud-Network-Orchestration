@@ -46,10 +46,31 @@ def safe_name(value: str) -> str:
 
 def resolve_region(provider: str, region: str) -> str:
     """
-    Map user-friendly regions to provider-specific regions.
+    Map user-friendly names and cross-cloud region identifiers
+    to a region supported by the requested cloud provider.
     """
     provider_regions = PROVIDER_REGIONS.get(provider, {})
-    return provider_regions.get(region, region)
+    normalized_region = region.strip().lower()
+
+    # Normalize equivalent region names/codes to a common friendly key.
+    region_aliases = {
+        "india": "India",
+        "mumbai": "Mumbai",
+        "ap-south-1": "Mumbai",
+        "asia-south1": "Mumbai",
+        "chennai": "Chennai",
+        "asia-south2": "Chennai",
+        "central india": "India",
+        "south india": "Chennai",
+        "us": "US",
+        "usa": "USA",
+        "east us": "US",
+        "us-east-1": "US",
+        "us-central1": "US",
+    }
+
+    friendly_region = region_aliases.get(normalized_region, region)
+    return provider_regions.get(friendly_region, region)
 
 
 def get_provider_block(provider: str, region: str) -> str:
