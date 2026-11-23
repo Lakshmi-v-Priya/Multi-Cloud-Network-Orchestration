@@ -18,7 +18,7 @@ provider "aws" {
 
 resource "aws_instance" "application_compute" {
   ami           = "ami-PLACEHOLDER"
-  instance_type = "Demo-2vCPU-4GB"
+  instance_type = "t3.medium"
 
   vpc_security_group_ids = [
     aws_security_group.application_security.id

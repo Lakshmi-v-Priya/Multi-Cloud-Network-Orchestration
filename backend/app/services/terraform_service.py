@@ -108,7 +108,22 @@ provider "google" {{
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
+def resolve_aws_instance_type(instance_type: str) -> str:
+    """
+    Convert simulated instance types into valid AWS EC2 instance types.
+    """
 
+    instance_type_mapping = {
+        "Demo-1vCPU-1GB": "t3.micro",
+        "Demo-2vCPU-2GB": "t3.small",
+        "Demo-2vCPU-4GB": "t3.medium",
+        "Demo-4vCPU-8GB": "t3.large",
+    }
+
+    return instance_type_mapping.get(
+        instance_type,
+        "t3.medium",
+    )
 # --------------------------------------------------
 # Terraform Generator
 # --------------------------------------------------
@@ -219,8 +234,12 @@ resource "aws_ebs_volume" "{resource_name}" {{
 
             elif resource_name == "application_compute":
 
-                instance_type = configuration.get(
-                    "instance_type", "t3.medium"
+                simulated_instance_type = configuration.get(
+                  "instance_type", "Demo-2vCPU-4GB"
+                )
+
+                instance_type = resolve_aws_instance_type(
+                    simulated_instance_type
                 )
 
                 terraform_code += f'''
