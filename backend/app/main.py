@@ -7,6 +7,7 @@ from app.api.cost_analysis import router as cost_analysis_router
 from app.api.optimization import router as optimization_router
 from app.api.orchestration import router as orchestration_router
 from app.api.validation import router as validation_router
+from app.api.deployment import router as deployment_router
 
 class Settings(BaseSettings):
     APP_NAME: str = "MultiCloud Orchestrator"
@@ -39,6 +40,7 @@ app.include_router(cost_analysis_router, prefix="/api/v1")
 app.include_router(optimization_router, prefix="/api/v1")
 app.include_router(orchestration_router, prefix="/api/v1")
 app.include_router(validation_router, prefix="/api/v1")
+app.include_router(deployment_router, prefix="/api/v1")
 
 # Allow the React frontend to communicate with FastAPI.
 

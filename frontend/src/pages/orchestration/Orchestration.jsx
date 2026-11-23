@@ -15,10 +15,13 @@ import {
   Info,
   Cpu,
   HardDrive,
+  ClipboardCheck,
+  XCircle,
 } from "lucide-react";
 
 import { getSavedIntents } from "../../services/intentService";
 import { getOrchestrationPlan } from "../../services/orchestrationService";
+import { validateInfrastructurePlan } from "../../services/validationService";
 
 const providerColors = {
   AWS: "border-orange-500/30 bg-orange-500/10 text-orange-400",
@@ -38,6 +41,11 @@ const Orchestration = () => {
   const [selectedIntentId, setSelectedIntentId] = useState("");
   const [provider, setProvider] = useState("");
   const [plan, setPlan] = useState(null);
+
+  // Validation state
+  const [validationReport, setValidationReport] = useState(null);
+  const [validating, setValidating] = useState(false);
+  const [validationError, setValidationError] = useState("");
 
   const [loadingIntents, setLoadingIntents] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -79,6 +87,8 @@ const Orchestration = () => {
   const handleIntentChange = (intentId) => {
     setSelectedIntentId(intentId);
     setPlan(null);
+    setValidationReport(null);
+    setValidationError("");
     setError("");
 
     const selected = intents.find(
@@ -99,6 +109,8 @@ const Orchestration = () => {
       setGenerating(true);
       setError("");
       setPlan(null);
+      setValidationReport(null);
+      setValidationError("");
 
       const result = await getOrchestrationPlan(
         selectedIntentId,
@@ -116,6 +128,34 @@ const Orchestration = () => {
     }
   };
 
+  // Validate the generated infrastructure plan
+  const handleValidatePlan = async () => {
+    if (!selectedIntentId || !provider || !plan) {
+      setValidationError("Generate an infrastructure plan first.");
+      return;
+    }
+
+    try {
+      setValidating(true);
+      setValidationError("");
+      setValidationReport(null);
+
+      const result = await validateInfrastructurePlan(
+        selectedIntentId,
+        provider
+      );
+
+      setValidationReport(result);
+    } catch (err) {
+      setValidationError(
+        err.response?.data?.detail ||
+          "Failed to validate infrastructure plan."
+      );
+    } finally {
+      setValidating(false);
+    }
+  };
+
   const formatCurrency = (amount, currency) => {
     try {
       return new Intl.NumberFormat("en-IN", {
@@ -128,9 +168,61 @@ const Orchestration = () => {
     }
   };
 
+  // Validation status styling
+  const getCheckStatusStyle = (status) => {
+    switch (status) {
+      case "PASS":
+        return "border-emerald-200 bg-emerald-50 text-emerald-700";
+      case "WARNING":
+        return "border-amber-200 bg-amber-50 text-amber-700";
+      case "FAIL":
+        return "border-red-200 bg-red-50 text-red-700";
+      default:
+        return "border-slate-200 bg-slate-50 text-slate-600";
+    }
+  };
+
+  const getCheckStatusIcon = (status) => {
+    switch (status) {
+      case "PASS":
+        return CheckCircle2;
+      case "WARNING":
+        return AlertCircle;
+      case "FAIL":
+        return XCircle;
+      default:
+        return Info;
+    }
+  };
+
+  const getOverallStatusStyle = (status) => {
+    switch (status) {
+      case "VALID":
+        return "border-emerald-200 bg-emerald-50 text-emerald-800";
+      case "VALID_WITH_WARNINGS":
+        return "border-amber-200 bg-amber-50 text-amber-800";
+      case "INVALID":
+        return "border-red-200 bg-red-50 text-red-800";
+      default:
+        return "border-slate-200 bg-slate-50 text-slate-700";
+    }
+  };
+
+  const getOverallStatusIcon = (status) => {
+    switch (status) {
+      case "VALID":
+        return CheckCircle2;
+      case "VALID_WITH_WARNINGS":
+        return AlertCircle;
+      case "INVALID":
+        return XCircle;
+      default:
+        return Info;
+    }
+  };
+
   return (
     <div className="space-y-7">
-
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -171,7 +263,6 @@ const Orchestration = () => {
         )}
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
           {/* Intent Selection */}
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -209,6 +300,8 @@ const Orchestration = () => {
               onChange={(e) => {
                 setProvider(e.target.value);
                 setPlan(null);
+                setValidationReport(null);
+                setValidationError("");
                 setError("");
               }}
               disabled={!selectedIntent}
@@ -320,7 +413,6 @@ const Orchestration = () => {
       {/* Generated Plan */}
       {plan && (
         <div className="space-y-6">
-
           {/* Plan Header */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -349,7 +441,6 @@ const Orchestration = () => {
 
             {/* Summary Cards */}
             <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-
               {/* Resource Count */}
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
                 <div className="flex items-center gap-2 text-slate-500">
@@ -537,6 +628,175 @@ const Orchestration = () => {
             </div>
           </div>
 
+          {/* Validate Plan Action */}
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-indigo-900">
+                  Infrastructure Plan Validation
+                </h2>
+                <p className="mt-1 text-sm text-indigo-700">
+                  Check resource completeness, budget, security settings, and deployment dependencies.
+                </p>
+              </div>
+
+              <button
+                onClick={handleValidatePlan}
+                disabled={validating || !plan}
+                className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {validating ? (
+                  <>
+                    <LoaderCircle size={18} className="animate-spin" />
+                    Validating...
+                  </>
+                ) : (
+                  <>
+                    <ClipboardCheck size={18} />
+                    Validate Plan
+                  </>
+                )}
+              </button>
+            </div>
+
+            {validationError && (
+              <div className="mt-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <AlertCircle size={18} />
+                {validationError}
+              </div>
+            )}
+          </div>
+
+          {/* Validation Report */}
+          {validationReport && (
+            <div className="space-y-5">
+              {/* Overall Status */}
+              {(() => {
+                const OverallIcon = getOverallStatusIcon(
+                  validationReport.overall_status
+                );
+
+                return (
+                  <div
+                    className={`rounded-2xl border p-5 sm:p-6 ${getOverallStatusStyle(
+                      validationReport.overall_status
+                    )}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <OverallIcon size={24} className="mt-0.5 shrink-0" />
+
+                      <div>
+                        <h2 className="text-lg font-bold">
+                          {validationReport.overall_status.replace(/_/g, " ")}
+                        </h2>
+                        <p className="mt-1 text-sm">
+                          Validation completed for {validationReport.provider} infrastructure plan.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Validation Summary */}
+                    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="rounded-xl border border-emerald-200 bg-white/70 p-3">
+                        <p className="text-2xl font-bold text-emerald-700">
+                          {validationReport.passed_checks}
+                        </p>
+                        <p className="text-xs text-emerald-700">Passed</p>
+                      </div>
+
+                      <div className="rounded-xl border border-amber-200 bg-white/70 p-3">
+                        <p className="text-2xl font-bold text-amber-700">
+                          {validationReport.warning_checks}
+                        </p>
+                        <p className="text-xs text-amber-700">Warnings</p>
+                      </div>
+
+                      <div className="rounded-xl border border-red-200 bg-white/70 p-3">
+                        <p className="text-2xl font-bold text-red-700">
+                          {validationReport.failed_checks}
+                        </p>
+                        <p className="text-xs text-red-700">Failed</p>
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
+                        <p className="text-2xl font-bold text-slate-800">
+                          {validationReport.total_checks}
+                        </p>
+                        <p className="text-xs text-slate-600">Total Checks</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Individual Validation Checks */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="mb-5">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Validation Details
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Review the result of every infrastructure validation check.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {validationReport.checks.map((check, index) => {
+                    const StatusIcon = getCheckStatusIcon(check.status);
+
+                    return (
+                      <div
+                        key={`${check.check_name}-${index}`}
+                        className={`rounded-xl border p-4 ${getCheckStatusStyle(
+                          check.status
+                        )}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <StatusIcon
+                            size={20}
+                            className="mt-0.5 shrink-0"
+                          />
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <h3 className="font-semibold">
+                                {check.check_name}
+                              </h3>
+
+                              <span className="rounded-full border border-current px-2 py-0.5 text-xs font-semibold">
+                                {check.status}
+                              </span>
+                            </div>
+
+                            <p className="mt-1 text-sm leading-relaxed">
+                              {check.message}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Validation Disclaimer */}
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <Info className="mt-0.5 shrink-0 text-amber-600" size={19} />
+                  <div>
+                    <h3 className="text-sm font-semibold text-amber-800">
+                      Validation Simulation Disclaimer
+                    </h3>
+                    <p className="mt-1 text-sm leading-relaxed text-amber-700">
+                      {validationReport.disclaimer ||
+                        "Validation is simulated. No actual cloud resources are deployed or modified."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Simulation Disclaimer */}
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
             <div className="flex items-start gap-3">
@@ -554,7 +814,6 @@ const Orchestration = () => {
               </div>
             </div>
           </div>
-
         </div>
       )}
     </div>
