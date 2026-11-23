@@ -1,14 +1,14 @@
 terraform {
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 4.0"
     }
   }
 }
 
-provider "aws" {
-  region = "ap-south-1"
+provider "azurerm" {
+  features {}
 }
 
 
@@ -16,22 +16,92 @@ provider "aws" {
 # Type: Virtual Machine
 # Purpose: Runs the application workload and handles application processing.
 
-data "aws_ssm_parameter" "amazon_linux_2023" {
-  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+variable "admin_ssh_public_key" {
+  description = "SSH public key for Azure VM authentication"
+  type        = string
 }
 
-resource "aws_instance" "application_compute" {
-  ami           = data.aws_ssm_parameter.amazon_linux_2023.value
-  instance_type = "t3.large"
-  subnet_id     = aws_subnet.application_subnet.id
-
-  vpc_security_group_ids = [
-    aws_security_group.application_security.id
-  ]
+resource "azurerm_public_ip" "application_public_ip" {
+  name                = "application-public-ip"
+  location            = "Central India"
+  resource_group_name = azurerm_resource_group.application_resource_group.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
 
   tags = {
-    Name = "application_compute"
+    project = "MultiCloud-Orchestrator"
   }
+}
+
+resource "azurerm_network_interface" "application_nic" {
+  name                = "application-nic"
+  location            = "Central India"
+  resource_group_name = azurerm_resource_group.application_resource_group.name
+
+  ip_configuration {
+    name                          = "application-ip-configuration"
+    subnet_id                     = azurerm_subnet.application_subnet.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.application_public_ip.id
+  }
+
+  tags = {
+    project = "MultiCloud-Orchestrator"
+  }
+}
+
+resource "azurerm_linux_virtual_machine" "application_compute" {
+  name                = "application-vm"
+  resource_group_name = azurerm_resource_group.application_resource_group.name
+  location            = "Central India"
+  size                = "Standard_B1s"
+  admin_username      = "azureuser"
+
+  network_interface_ids = [
+    azurerm_network_interface.application_nic.id
+  ]
+
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = var.admin_ssh_public_key
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
+
+  tags = {
+    project = "MultiCloud-Orchestrator"
+  }
+}
+
+resource "azurerm_managed_disk" "application_data_disk" {
+  name                 = "application-data-disk"
+  location             = "Central India"
+  resource_group_name  = azurerm_resource_group.application_resource_group.name
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 100
+
+  tags = {
+    project = "MultiCloud-Orchestrator"
+  }
+}
+
+
+resource "azurerm_virtual_machine_data_disk_attachment" "application_data_disk_attachment" {
+  managed_disk_id    = azurerm_managed_disk.application_data_disk.id
+  virtual_machine_id = azurerm_linux_virtual_machine.application_compute.id
+  lun                = 0
+  caching            = "ReadWrite"
 }
 
 
@@ -39,95 +109,81 @@ resource "aws_instance" "application_compute" {
 # Type: Block Storage
 # Purpose: Stores application files, data, and persistent information.
 
-resource "aws_ebs_volume" "application_storage" {
-  availability_zone = "ap-south-1a"
-  size              = 100
-  type              = "gp3"
-
-  tags = {
-    Name = "application_storage"
-  }
-}
-
 
 # Resource: application_network
 # Type: Virtual Network
 # Purpose: Provides network connectivity for the application infrastructure.
 
-resource "aws_vpc" "application_network" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_support   = true
-  enable_dns_hostnames = true
+resource "azurerm_resource_group" "application_resource_group" {
+  name     = "application-resource-group"
+  location = "Central India"
 
   tags = {
-    Name = "application_network"
+    project = "MultiCloud-Orchestrator"
   }
 }
 
-resource "aws_subnet" "application_subnet" {
-  vpc_id                  = aws_vpc.application_network.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "ap-south-1a"
-  map_public_ip_on_launch = true
+resource "azurerm_virtual_network" "application_vnet" {
+  name                = "application-vnet"
+  address_space       = ["10.0.0.0/16"]
+  location            = "Central India"
+  resource_group_name = azurerm_resource_group.application_resource_group.name
 
   tags = {
-    Name = "application_subnet"
+    project = "MultiCloud-Orchestrator"
   }
 }
 
-resource "aws_internet_gateway" "application_igw" {
-  vpc_id = aws_vpc.application_network.id
+resource "azurerm_subnet" "application_subnet" {
+  name                 = "application-subnet"
+  resource_group_name  = azurerm_resource_group.application_resource_group.name
+  virtual_network_name = azurerm_virtual_network.application_vnet.name
+  address_prefixes     = ["10.0.1.0/24"]
+}
+
+resource "azurerm_network_security_group" "application_nsg" {
+  name                = "application-nsg"
+  location            = "Central India"
+  resource_group_name = azurerm_resource_group.application_resource_group.name
+
+
+  security_rule {
+    name                       = "Allow-HTTP"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "Allow-HTTPS"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
 
   tags = {
-    Name = "application_igw"
+    project = "MultiCloud-Orchestrator"
   }
 }
 
-resource "aws_route_table" "application_route_table" {
-  vpc_id = aws_vpc.application_network.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.application_igw.id
-  }
-
-  tags = {
-    Name = "application_route_table"
-  }
-}
-
-resource "aws_route_table_association" "application_route_association" {
-  subnet_id      = aws_subnet.application_subnet.id
-  route_table_id = aws_route_table.application_route_table.id
+resource "azurerm_subnet_network_security_group_association" "application_nsg_association" {
+  subnet_id                 = azurerm_subnet.application_subnet.id
+  network_security_group_id = azurerm_network_security_group.application_nsg.id
 }
 
 
 # Resource: application_security
 # Type: Network Security Rules
 # Purpose: Defines basic network access restrictions for the planned infrastructure.
-
-resource "aws_security_group" "application_security" {
-  name        = "application_security"
-  description = "Generated security configuration"
-  vpc_id      = aws_vpc.application_network.id
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "application_security"
-  }
-}
 
 
