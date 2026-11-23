@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -17,6 +19,15 @@ router = APIRouter(
     prefix="/deployment",
     tags=["Deployment Preparation"],
 )
+
+
+# --------------------------------------------------
+# Project Root and Terraform File Path
+# --------------------------------------------------
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+TERRAFORM_FILE = PROJECT_ROOT / "main.tf"
 
 
 # --------------------------------------------------
@@ -63,7 +74,7 @@ def prepare_deployment(
 
 
 # --------------------------------------------------
-# 2. Generate Terraform Configuration
+# 2. Generate and Save Terraform Configuration
 # --------------------------------------------------
 
 @router.get("/{intent_id}/terraform")
@@ -101,7 +112,30 @@ def generate_terraform(
             )
         )
 
-        # Step 3: Return generated configuration
+        # Step 3: Extract generated Terraform code
+        terraform_code = terraform_configuration.get(
+            "terraform_code"
+        )
+
+        if not terraform_code:
+            raise ValueError(
+                "Generated Terraform code is empty."
+            )
+
+        # Step 4: Save Terraform code to main.tf
+        TERRAFORM_FILE.write_text(
+            terraform_code,
+            encoding="utf-8",
+        )
+
+        # Step 5: Add file-saving information to response
+        terraform_configuration["saved_to"] = str(
+            TERRAFORM_FILE
+        )
+
+        terraform_configuration["file_saved"] = True
+
+        # Step 6: Return generated configuration
         return terraform_configuration
 
     except ValueError as error:
@@ -113,5 +147,5 @@ def generate_terraform(
     except Exception as error:
         raise HTTPException(
             status_code=500,
-            detail="Failed to generate Terraform configuration.",
+            detail="Failed to generate or save Terraform configuration.",
         ) from error

@@ -1,3 +1,4 @@
+
 import re
 
 
@@ -174,6 +175,10 @@ def generate_terraform_configuration(deployment):
 
         if provider == "AWS":
 
+            # ------------------------------
+            # VPC, Subnet, IGW and Routing
+            # ------------------------------
+
             if resource_name == "application_network":
 
                 terraform_code += f'''
@@ -186,7 +191,48 @@ resource "aws_vpc" "{resource_name}" {{
     Name = "{resource_name}"
   }}
 }}
+
+resource "aws_subnet" "application_subnet" {{
+  vpc_id                  = aws_vpc.{resource_name}.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone        = "{mapped_region}a"
+  map_public_ip_on_launch = true
+
+  tags = {{
+    Name = "application_subnet"
+  }}
+}}
+
+resource "aws_internet_gateway" "application_igw" {{
+  vpc_id = aws_vpc.{resource_name}.id
+
+  tags = {{
+    Name = "application_igw"
+  }}
+}}
+
+resource "aws_route_table" "application_route_table" {{
+  vpc_id = aws_vpc.{resource_name}.id
+
+  route {{
+    cidr_block = "0.0.0.0/0"
+    gateway_id  = aws_internet_gateway.application_igw.id
+  }}
+
+  tags = {{
+    Name = "application_route_table"
+  }}
+}}
+
+resource "aws_route_table_association" "application_route_association" {{
+  subnet_id      = aws_subnet.application_subnet.id
+  route_table_id = aws_route_table.application_route_table.id
+}}
 '''
+
+            # ------------------------------
+            # Security Group
+            # ------------------------------
 
             elif resource_name == "application_security":
 
@@ -216,6 +262,10 @@ resource "aws_security_group" "{resource_name}" {{
 }}
 '''
 
+            # ------------------------------
+            # EBS Storage
+            # ------------------------------
+
             elif resource_name == "application_storage":
 
                 capacity = configuration.get(
@@ -233,6 +283,10 @@ resource "aws_ebs_volume" "{resource_name}" {{
   }}
 }}
 '''
+
+            # ------------------------------
+            # EC2 Compute
+            # ------------------------------
 
             elif resource_name == "application_compute":
 
@@ -252,6 +306,7 @@ data "aws_ssm_parameter" "amazon_linux_2023" {{
 resource "aws_instance" "{resource_name}" {{
   ami           = data.aws_ssm_parameter.amazon_linux_2023.value
   instance_type  = "{instance_type}"
+  subnet_id     = aws_subnet.application_subnet.id
 
   vpc_security_group_ids = [
     aws_security_group.application_security.id
@@ -285,7 +340,8 @@ resource "aws_instance" "{resource_name}" {{
             terraform_code += f'''
 # GCP resource placeholder for {resource_name}
 # Planned resource type: {resource_type}
-# Configuration: {configuration}
+# Configuration: {configuration
+}
 # Implemented resource mapping will be added next.
 '''
 

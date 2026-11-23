@@ -22,7 +22,8 @@ data "aws_ssm_parameter" "amazon_linux_2023" {
 
 resource "aws_instance" "application_compute" {
   ami           = data.aws_ssm_parameter.amazon_linux_2023.value
-  instance_type = "t3.medium"
+  instance_type = "t3.large"
+  subnet_id     = aws_subnet.application_subnet.id
 
   vpc_security_group_ids = [
     aws_security_group.application_security.id
@@ -40,7 +41,7 @@ resource "aws_instance" "application_compute" {
 
 resource "aws_ebs_volume" "application_storage" {
   availability_zone = "ap-south-1a"
-  size              = 50
+  size              = 100
   type              = "gp3"
 
   tags = {
@@ -61,6 +62,43 @@ resource "aws_vpc" "application_network" {
   tags = {
     Name = "application_network"
   }
+}
+
+resource "aws_subnet" "application_subnet" {
+  vpc_id                  = aws_vpc.application_network.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "ap-south-1a"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "application_subnet"
+  }
+}
+
+resource "aws_internet_gateway" "application_igw" {
+  vpc_id = aws_vpc.application_network.id
+
+  tags = {
+    Name = "application_igw"
+  }
+}
+
+resource "aws_route_table" "application_route_table" {
+  vpc_id = aws_vpc.application_network.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.application_igw.id
+  }
+
+  tags = {
+    Name = "application_route_table"
+  }
+}
+
+resource "aws_route_table_association" "application_route_association" {
+  subnet_id      = aws_subnet.application_subnet.id
+  route_table_id = aws_route_table.application_route_table.id
 }
 
 
@@ -91,6 +129,5 @@ resource "aws_security_group" "application_security" {
     Name = "application_security"
   }
 }
-
 
 
