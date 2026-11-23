@@ -16,8 +16,12 @@ provider "aws" {
 # Type: Virtual Machine
 # Purpose: Runs the application workload and handles application processing.
 
+data "aws_ssm_parameter" "amazon_linux_2023" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+}
+
 resource "aws_instance" "application_compute" {
-  ami           = "ami-PLACEHOLDER"
+  ami           = data.aws_ssm_parameter.amazon_linux_2023.value
   instance_type = "t3.medium"
 
   vpc_security_group_ids = [

@@ -49,7 +49,6 @@ def resolve_region(provider: str, region: str) -> str:
     Map user-friendly regions to provider-specific regions.
     """
     provider_regions = PROVIDER_REGIONS.get(provider, {})
-
     return provider_regions.get(region, region)
 
 
@@ -108,9 +107,10 @@ provider "google" {{
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
+
 def resolve_aws_instance_type(instance_type: str) -> str:
     """
-    Convert simulated instance types into valid AWS EC2 instance types.
+    Convert simulated instance types into AWS EC2 instance types.
     """
 
     instance_type_mapping = {
@@ -124,6 +124,8 @@ def resolve_aws_instance_type(instance_type: str) -> str:
         instance_type,
         "t3.medium",
     )
+
+
 # --------------------------------------------------
 # Terraform Generator
 # --------------------------------------------------
@@ -235,7 +237,7 @@ resource "aws_ebs_volume" "{resource_name}" {{
             elif resource_name == "application_compute":
 
                 simulated_instance_type = configuration.get(
-                  "instance_type", "Demo-2vCPU-4GB"
+                    "instance_type", "Demo-2vCPU-4GB"
                 )
 
                 instance_type = resolve_aws_instance_type(
@@ -243,8 +245,12 @@ resource "aws_ebs_volume" "{resource_name}" {{
                 )
 
                 terraform_code += f'''
+data "aws_ssm_parameter" "amazon_linux_2023" {{
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+}}
+
 resource "aws_instance" "{resource_name}" {{
-  ami           = "ami-PLACEHOLDER"
+  ami           = data.aws_ssm_parameter.amazon_linux_2023.value
   instance_type  = "{instance_type}"
 
   vpc_security_group_ids = [
