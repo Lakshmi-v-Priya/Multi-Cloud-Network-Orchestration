@@ -528,13 +528,110 @@ resource "azurerm_virtual_machine_data_disk_attachment" "application_data_disk_a
 
         elif provider == "GCP":
 
-            terraform_code += f'''
-# GCP resource placeholder for {resource_name}
-# Planned resource type: {resource_type}
-# Configuration: {configuration
+            # ------------------------------
+            # VPC and Subnet
+            # ------------------------------
+
+            if resource_name == "application_network":
+
+                terraform_code += f"""
+resource "google_compute_network" "application_network" {{
+  name                    = "application-network"
+  auto_create_subnetworks = false
+}}
+
+resource "google_compute_subnetwork" "application_subnet" {{
+  name          = "application-subnet"
+  ip_cidr_range = "10.0.1.0/24"
+  region        = "{mapped_region}"
+  network       = google_compute_network.application_network.id
+}}
+"""
+
+            # ------------------------------
+            # Firewall Rules
+            # ------------------------------
+
+            elif resource_name == "application_security":
+
+                terraform_code += """
+resource "google_compute_firewall" "application_firewall" {
+  name    = "application-firewall"
+  network = google_compute_network.application_network.name
+
+  allow {
+    protocol = "tcp"
+    ports   = ["80", "443"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["application-server"]
 }
-# Implemented resource mapping will be added next.
-'''
+"""
+
+            # ------------------------------
+            # Persistent Disk
+            # ------------------------------
+
+            elif resource_name == "application_storage":
+
+                capacity = configuration.get("capacity_GB", 100)
+
+                terraform_code += f"""
+resource "google_compute_disk" "application_storage" {{
+  name   = "application-data-disk"
+  type   = "pd-balanced"
+  zone   = "{mapped_region}-a"
+  size  = {capacity}
+}}
+"""
+
+            # ------------------------------
+            # Compute Engine VM
+            # ------------------------------
+
+            elif resource_name == "application_compute":
+
+                simulated_instance_type = configuration.get(
+                    "instance_type", "Demo-2vCPU-4GB"
+                )
+                gcp_machine_type_mapping = {
+                    "Demo-1vCPU-1GB": "e2-micro",
+                    "Demo-2vCPU-2GB": "e2-small",
+                    "Demo-2vCPU-4GB": "e2-medium",
+                    "Demo-4vCPU-8GB": "e2-standard-4",
+                }
+                machine_type = gcp_machine_type_mapping.get(
+                    simulated_instance_type, "e2-medium"
+                )
+
+                terraform_code += f"""
+resource "google_compute_instance" "application_compute" {{
+  name         = "application-vm"
+  machine_type = "{machine_type}"
+  zone         = "{mapped_region}-a"
+
+  boot_disk {{
+    initialize_params {{
+      image = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
+      size  = 20
+    }}
+  }}
+
+  network_interface {{
+    subnetwork = google_compute_subnetwork.application_subnet.id
+    access_config {{}}
+  }}
+
+  attached_disk {{
+    source      = google_compute_disk.application_storage.id
+    device_name = "application-data-disk"
+    mode        = "READ_WRITE"
+  }}
+
+  tags = ["application-server"]
+}}
+"""
 
         terraform_code += "\n\n"
 
