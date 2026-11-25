@@ -15,3 +15,15 @@ export const generateTerraform = async (intentId, provider) => {
 
   return response.data;
 };
+
+// Validate generated Terraform configuration
+export const validateTerraform = async (intentId, provider) => {
+  const response = await api.get(
+    `/terraform-validation/${intentId}/validate`,
+    {
+      params: { provider },
+    }
+  );
+
+  return response.data;
+};

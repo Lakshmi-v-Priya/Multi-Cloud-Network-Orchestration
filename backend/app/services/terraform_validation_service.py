@@ -175,11 +175,15 @@ def validate_terraform_configuration(terraform_code: str, provider: str, intent_
             env=terraform_env,
         )
         checks.append({
-            "check_name": "Terraform initialization",
-            "status": "PASS" if init_result["success"] else "FAIL",
-            "message": "Terraform initialization completed with backend disabled." if init_result["success"] else "Terraform initialization failed.",
-            "details": init_result["stdout"] or init_result["stderr"],
-        })
+    "check_name": "Terraform initialization",
+    "status": "PASS" if init_result["success"] else "FAIL",
+    "message": (
+        "Terraform initialization completed with backend disabled."
+        if init_result["success"]
+        else f"Terraform initialization failed: {init_result['stderr'] or init_result['stdout'] or 'No error output captured.'}"
+    ),
+    "details": init_result["stdout"] or init_result["stderr"],
+})
 
         if init_result["success"]:
             validate_result = _run_terraform(

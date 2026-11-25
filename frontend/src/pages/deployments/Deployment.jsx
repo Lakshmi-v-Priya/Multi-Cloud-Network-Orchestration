@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 import { getSavedIntents } from "../../services/intentService";
-import { prepareDeployment, generateTerraform } from "../../services/deploymentService";
+import { prepareDeployment, generateTerraform, validateTerraform } from "../../services/deploymentService";
 
 function Deployment() {
   const [intents, setIntents] = useState([]);
@@ -27,6 +27,9 @@ function Deployment() {
   const [terraformData, setTerraformData] = useState(null);
   const [generatingTerraform, setGeneratingTerraform] = useState(false);
   const [terraformError, setTerraformError] = useState("");
+  const [terraformValidation, setTerraformValidation] = useState(null);
+  const [validatingTerraform, setValidatingTerraform] = useState(false);
+  const [validationError, setValidationError] = useState("");
 
   const [loadingIntents, setLoadingIntents] = useState(true);
   const [preparing, setPreparing] = useState(false);
@@ -96,6 +99,28 @@ function Deployment() {
       );
     } finally {
       setGeneratingTerraform(false);
+    }
+  };
+
+  // Validate generated Terraform configuration
+  const handleValidateTerraform = async () => {
+    if (!selectedIntentId) {
+      setValidationError("Please select an infrastructure intent.");
+      return;
+    }
+
+    try {
+      setValidationError("");
+      setTerraformValidation(null);
+      setValidatingTerraform(true);
+      const data = await validateTerraform(selectedIntentId, provider);
+      setTerraformValidation(data);
+    } catch (err) {
+      setValidationError(
+        err.response?.data?.detail || "Failed to validate Terraform configuration."
+      );
+    } finally {
+      setValidatingTerraform(false);
     }
   };
 
@@ -210,6 +235,8 @@ function Deployment() {
                 setDeploymentData(null);
                 setTerraformData(null);
                 setTerraformError("");
+                setTerraformValidation(null);
+                setValidationError("");
                 setError("");
               }}
               disabled={loadingIntents}
@@ -242,6 +269,8 @@ function Deployment() {
                 setDeploymentData(null);
                 setTerraformData(null);
                 setTerraformError("");
+                setTerraformValidation(null);
+                setValidationError("");
                 setError("");
               }}
               className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -601,6 +630,97 @@ function Deployment() {
                 <pre className="max-h-[600px] overflow-auto bg-gray-950 p-4 text-xs leading-5 text-gray-100 sm:text-sm">
                   <code>{terraformData.terraform_code}</code>
                 </pre>
+              </div>
+            )}
+          </div>
+
+
+          {/* Terraform Validation */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Terraform Validation</h2>
+                <p className="mt-1 text-sm text-gray-500">Run formatting, initialization, configuration, and basic security checks in an isolated validation environment.</p>
+              </div>
+              <button
+                onClick={handleValidateTerraform}
+                disabled={validatingTerraform}
+                className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {validatingTerraform ? (
+                  <><LoaderCircle className="h-4 w-4 animate-spin" /> Validating...</>
+                ) : (
+                  <><ClipboardCheck className="h-4 w-4" /> Validate Terraform</>
+                )}
+              </button>
+            </div>
+
+            {validationError && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {validationError}
+              </div>
+            )}
+
+            {terraformValidation && (
+              <div className="mt-5 space-y-4">
+                <div className={`rounded-lg border p-4 ${terraformValidation.overall_status === "FAILED" ? "border-red-200 bg-red-50" : terraformValidation.overall_status === "READY" ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+                  <div className="flex items-start gap-3">
+                    {terraformValidation.overall_status === "FAILED" ? (
+                      <AlertCircle className="h-6 w-6 text-red-600" />
+                    ) : (
+                      <CheckCircle2 className={`h-6 w-6 ${terraformValidation.overall_status === "READY" ? "text-green-600" : "text-amber-600"}`} />
+                    )}
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        {terraformValidation.overall_status === "READY" ? "Terraform is Ready" : terraformValidation.overall_status === "READY_WITH_WARNINGS" ? "Ready with Warnings" : "Validation Failed"}
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-600">{terraformValidation.overall_status}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    ["Total Checks", terraformValidation.total_checks ?? 0, "bg-gray-50"],
+                    ["Passed", terraformValidation.passed_checks ?? 0, "bg-green-50"],
+                    ["Warnings", terraformValidation.warning_checks ?? 0, "bg-amber-50"],
+                    ["Failed", terraformValidation.failed_checks ?? 0, "bg-red-50"],
+                  ].map(([label, value, style]) => (
+                    <div key={label} className={`rounded-lg p-3 ${style}`}>
+                      <p className="text-xs text-gray-500">{label}</p>
+                      <p className="mt-1 text-xl font-bold text-gray-900">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {Array.isArray(terraformValidation.checks) && terraformValidation.checks.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-gray-800">Validation Checks</h3>
+                    {terraformValidation.checks.map((check, index) => (
+                      <div key={check.name || check.check_name || index} className="rounded-lg border border-gray-200 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-medium text-gray-800">{check.name || check.check_name || `Check ${index + 1}`}</p>
+                          <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">{check.status || check.result || check.severity || "INFO"}</span>
+                        </div>
+                        {(check.message || check.details || check.description) && <p className="mt-1 text-sm text-gray-600">{check.message || check.details || check.description}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {terraformValidation.security_findings?.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-gray-800">Security Findings</h3>
+                    {terraformValidation.security_findings.map((finding, index) => (
+                      <div key={finding.id || index} className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <p className="font-medium text-amber-800">{finding.title || finding.name || finding.severity || `Finding ${index + 1}`}</p>
+                        <p className="mt-1 text-sm text-amber-700">{finding.message || finding.description || finding.details || "Review this finding."}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-500">Validation runs in a temporary isolated directory. It does not create or modify real cloud resources. Security checks are heuristic and are not a complete security audit.</p>
               </div>
             )}
           </div>
