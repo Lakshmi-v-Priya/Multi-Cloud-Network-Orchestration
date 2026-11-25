@@ -709,14 +709,54 @@ function Deployment() {
                 )}
 
                 {terraformValidation.security_findings?.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <h3 className="font-semibold text-gray-800">Security Findings</h3>
-                    {terraformValidation.security_findings.map((finding, index) => (
-                      <div key={finding.id || index} className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                        <p className="font-medium text-amber-800">{finding.title || finding.name || finding.severity || `Finding ${index + 1}`}</p>
-                        <p className="mt-1 text-sm text-amber-700">{finding.message || finding.description || finding.details || "Review this finding."}</p>
-                      </div>
-                    ))}
+                    {terraformValidation.security_findings.map((finding, index) => {
+                      const severity = (finding.severity || "INFO").toUpperCase();
+
+                      const severityStyles = {
+                        CRITICAL: "border-red-300 bg-red-50 text-red-800",
+                        HIGH: "border-orange-300 bg-orange-50 text-orange-800",
+                        MEDIUM: "border-amber-300 bg-amber-50 text-amber-800",
+                        LOW: "border-blue-300 bg-blue-50 text-blue-800",
+                        INFO: "border-gray-300 bg-gray-50 text-gray-800",
+                        PASS: "border-green-300 bg-green-50 text-green-800",
+                      };
+
+                      const style = severityStyles[severity] || severityStyles.INFO;
+
+
+                      return (
+                        <div
+                          key={finding.id || index}
+                          className={`rounded-lg border p-3 ${style}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <p className="font-semibold">
+                              {finding.title || finding.name || `Finding ${index + 1}`}
+                            </p>
+
+                            <span className="rounded-full border px-2 py-0.5 text-xs font-semibold">
+                              {severity}
+                            </span>
+                          </div>
+
+                          <p className="mt-2 text-sm">
+                            {finding.message ||
+                              finding.description ||
+                              finding.details ||
+                              "Review this finding."}
+                          </p>
+
+                          {finding.recommendation && (
+                            <div className="mt-2 border-t border-current/20 pt-2">
+                              <p className="text-sm font-medium">Recommendation</p>
+                              <p className="mt-1 text-sm">{finding.recommendation}</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
