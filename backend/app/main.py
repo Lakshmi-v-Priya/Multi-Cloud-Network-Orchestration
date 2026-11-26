@@ -9,7 +9,7 @@ from app.api.orchestration import router as orchestration_router
 from app.api.validation import router as validation_router
 from app.api.deployment import router as deployment_router
 from app.api.terraform_validation import router as terraform_validation_router
-
+from app.api.ai_intent import router as ai_intent_router
 
 class Settings(BaseSettings):
     APP_NAME: str = "MultiCloud Orchestrator"
@@ -44,6 +44,7 @@ app.include_router(orchestration_router, prefix="/api/v1")
 app.include_router(validation_router, prefix="/api/v1")
 app.include_router(deployment_router, prefix="/api/v1")
 app.include_router(terraform_validation_router, prefix="/api/v1")
+app.include_router(ai_intent_router, prefix="/api/v1")
 
 # Allow the React frontend to communicate with FastAPI.
 

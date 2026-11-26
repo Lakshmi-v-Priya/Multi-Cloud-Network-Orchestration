@@ -1,3 +1,4 @@
+
 from typing import Literal
 from pydantic import BaseModel, Field
 
@@ -26,8 +27,9 @@ class AIIntentExtracted(BaseModel):
 
 
 class AIIntentResponse(BaseModel):
+    input_type: Literal["valid", "incomplete", "invalid"]
     success: bool
     message: str
     extracted_intent: AIIntentExtracted
-    missing_fields: list[str] = []
-    clarification_questions: list[str] = []
+    missing_fields: list[str] = Field(default_factory=list)
+    clarification_questions: list[str] = Field(default_factory=list)
