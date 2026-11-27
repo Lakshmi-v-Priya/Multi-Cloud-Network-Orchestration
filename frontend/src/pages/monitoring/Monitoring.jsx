@@ -1,642 +1,151 @@
-
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity,
-  Cloud,
-  Server,
-  Wifi,
-  Gauge,
-  RefreshCw,
-  ShieldCheck,
-  AlertTriangle,
-  Clock,
-  ArrowUpRight,
-  ArrowDownRight,
-  Globe,
-  Zap,
+  Activity, Cloud, Server, Wifi, Gauge, RefreshCw, ShieldCheck, AlertTriangle,
+  Clock, ArrowUpRight, ArrowDownRight, Globe, Zap, Pause, Play, Search,
+  CheckCircle2, CircleAlert, TrendingUp, TrendingDown, Lightbulb, SlidersHorizontal,
 } from 'lucide-react'
 
-const providers = ['All Providers', 'AWS', 'Azure', 'GCP']
-
-const initialClouds = [
-  { name: 'AWS', region: 'us-east-1', status: 'Healthy', latency: 42, bandwidth: 68, packetLoss: 0.2, nodes: 12 },
-  { name: 'Azure', region: 'eastus', status: 'Healthy', latency: 56, bandwidth: 54, packetLoss: 0.1, nodes: 8 },
-  { name: 'GCP', region: 'us-central1', status: 'Healthy', latency: 38, bandwidth: 72, packetLoss: 0.3, nodes: 10 },
+const PROVIDERS = ['All Providers', 'AWS', 'Azure', 'GCP']
+const BASE_CLOUDS = [
+  { name: 'AWS', region: 'us-east-1', latency: 42, bandwidth: 68, packetLoss: 0.2, nodes: 12 },
+  { name: 'Azure', region: 'eastus', latency: 56, bandwidth: 54, packetLoss: 0.1, nodes: 8 },
+  { name: 'GCP', region: 'us-central1', latency: 38, bandwidth: 72, packetLoss: 0.3, nodes: 10 },
 ]
-
-const providerColors = { AWS: '#2563eb', Azure: '#7c3aed', GCP: '#059669' }
-const metricDefinitions = {
-  latency: { label: 'Latency', unit: 'ms', color: '#2563eb', max: 240 },
-  bandwidth: { label: 'Bandwidth Utilization', unit: '%', color: '#7c3aed', max: 100 },
-  packetLoss: { label: 'Packet Loss', unit: '%', color: '#059669', max: 4 },
+const COLORS = { AWS: '#2563eb', Azure: '#7c3aed', GCP: '#059669' }
+const DEFAULT_THRESHOLDS = { latencyWarning: 100, latencyCritical: 180, bandwidthWarning: 80, bandwidthCritical: 90, packetWarning: 1, packetCritical: 2 }
+const fmtTime = (date) => new Date(date).toLocaleTimeString()
+const seedSeries = (base, spread = 8) => Array.from({ length: 24 }, () => Number(Math.max(0, base + (Math.random() - 0.5) * spread).toFixed(2)))
+const INITIAL_PERFORMANCE = { latency: { AWS: seedSeries(42, 12), Azure: seedSeries(56, 14), GCP: seedSeries(38, 10) }, bandwidth: { AWS: seedSeries(68, 8), Azure: seedSeries(54, 7), GCP: seedSeries(72, 9) }, packetLoss: { AWS: seedSeries(.2, .3), Azure: seedSeries(.1, .2), GCP: seedSeries(.3, .35) } }
+const statusOf = (cloud, t) => cloud.latency >= t.latencyCritical || cloud.bandwidth >= t.bandwidthCritical || cloud.packetLoss >= t.packetCritical ? 'Critical' : cloud.latency >= t.latencyWarning || cloud.bandwidth >= t.bandwidthWarning || cloud.packetLoss >= t.packetWarning ? 'Warning' : 'Healthy'
+const healthScore = (clouds) => Math.max(0, Math.round(100 - clouds.reduce((sum, c) => sum + Math.min(35, c.latency / 8) + Math.min(30, c.bandwidth / 4) + Math.min(35, c.packetLoss * 10), 0) / Math.max(1, clouds.length)))
+const Badge = ({ status }) => {
+  const style = status === 'Critical' ? 'bg-red-50 text-red-700' : status === 'Warning' ? 'bg-amber-50 text-amber-700' : status === 'Resolved' ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-50 text-emerald-700'
+  const dot = status === 'Critical' ? 'bg-red-500' : status === 'Warning' ? 'bg-amber-500' : 'bg-emerald-500'
+  return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${style}`}><span className={`h-1.5 w-1.5 rounded-full ${dot}`} />{status}</span>
 }
-const timeRanges = [
-  { label: '1 Minute', points: 12 },
-  { label: '5 Minutes', points: 60 },
-  { label: '15 Minutes', points: 180 },
-]
-function seedMetricSeries(base, variance, count = 180) {
-  let value = base
-  return Array.from({ length: count }, () => {
-    value = Math.max(0, value + (Math.random() - 0.5) * variance)
-    return Number(value.toFixed(2))
-  })
+const MetricCard = ({ title, value, unit, icon: Icon, sub, iconStyle = 'bg-blue-50 text-blue-600' }) => <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-sm font-medium text-slate-500">{title}</p><div className={`rounded-xl p-2 ${iconStyle}`}><Icon size={18}/></div></div><div className="mt-4 flex items-end gap-2"><span className="text-3xl font-bold text-slate-900">{value}</span><span className="mb-1 text-sm text-slate-500">{unit}</span></div><p className="mt-2 text-xs text-slate-500">{sub}</p></div>
+function HistoryChart({ metric, series, selectedProviders, unit, max }) {
+  const w=560, h=170, pad=24;
+  const values=selectedProviders.flatMap(p=>series[p]||[]);
+  const ceiling=max || Math.max(1, ...values);
+  return <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label={`${metric} history chart`}>{[0,.25,.5,.75,1].map(t=><line key={t} x1={pad} x2={w-pad} y1={pad+(h-2*pad)*t} y2={pad+(h-2*pad)*t} stroke="#e2e8f0" strokeDasharray="4 4"/>)}{selectedProviders.map(provider=>{const vals=series[provider]||[];const pts=vals.map((v,i)=>`${pad+(vals.length<=1?0:i/(vals.length-1)*(w-2*pad))},${h-pad-Math.max(0,Math.min(ceiling,v))/ceiling*(h-2*pad)}`).join(" ");return <polyline key={provider} points={pts} fill="none" stroke={COLORS[provider]} strokeWidth="2.5" strokeLinecap="round"/>})}<text x={pad} y={h-5} fontSize="11" fill="#64748b">Older</text><text x={w-pad} y={h-5} textAnchor="end" fontSize="11" fill="#64748b">Now ({unit})</text></svg>
 }
-function createInitialPerformanceHistory() {
-  return {
-    latency: { AWS: seedMetricSeries(42, 12), Azure: seedMetricSeries(56, 14), GCP: seedMetricSeries(38, 10) },
-    bandwidth: { AWS: seedMetricSeries(68, 8), Azure: seedMetricSeries(54, 7), GCP: seedMetricSeries(72, 9) },
-    packetLoss: { AWS: seedMetricSeries(0.2, 0.3), Azure: seedMetricSeries(0.1, 0.2), GCP: seedMetricSeries(0.3, 0.35) },
-  }
-}
-function PerformanceLineChart({ metric, series, selectedProvider, points }) {
-  const width = 720, height = 220, left = 48, right = 16, top = 16, bottom = 26
-  const plotW = width - left - right, plotH = height - top - bottom
-  const config = metricDefinitions[metric]
-  const visibleProviders = selectedProvider === 'All Providers' ? ['AWS', 'Azure', 'GCP'] : [selectedProvider]
-  const data = visibleProviders.flatMap((provider) => (series[provider] || []).slice(-points))
-  const max = metric === 'latency' ? Math.max(120, Math.ceil((Math.max(...data, 0) + 20) / 40) * 40) : config.max
-  const ticks = [0, max / 4, max / 2, max * 0.75, max]
-  const x = (i, n) => left + (n <= 1 ? 0 : i / (n - 1) * plotW)
-  const y = (v) => top + plotH - Math.max(0, Math.min(max, v)) / max * plotH
-  return (
-    <div className="w-full overflow-x-auto">
-      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[580px] w-full" role="img" aria-label={`${config.label} history chart`}>
-        {ticks.map((tick, index) => <g key={index}><line x1={left} x2={width - right} y1={y(tick)} y2={y(tick)} stroke="#e2e8f0" strokeDasharray="4 4" /><text x={left - 7} y={y(tick) + 4} textAnchor="end" fontSize="11" fill="#64748b">{Number(tick.toFixed(1))}</text></g>)}
-        {visibleProviders.map((provider) => {
-          const values = (series[provider] || []).slice(-points)
-          const linePoints = values.map((value, i) => `${x(i, values.length)},${y(value)}`).join(' ')
-          return <polyline key={provider} points={linePoints} fill="none" stroke={providerColors[provider]} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        })}
-        <text x={left} y={height - 7} fontSize="11" fill="#64748b">Earlier</text>
-        <text x={width - right} y={height - 7} textAnchor="end" fontSize="11" fill="#64748b">Now</text>
-      </svg>
-    </div>
-  )
-}
-
-function randomChange(value, min, max, step = 1) {
-  const change = (Math.random() > 0.5 ? 1 : -1) * step
-  return Math.max(min, Math.min(max, value + change))
-}
-
-function MetricCard({ title, value, unit, icon: Icon, change, color }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-slate-500">{title}</p>
-        <div className={`rounded-xl p-2 ${color}`}>
-          <Icon size={18} />
-        </div>
-      </div>
-      <div className="mt-4 flex items-end gap-2">
-        <span className="text-3xl font-bold tracking-tight text-slate-900">{value}</span>
-        <span className="mb-1 text-sm text-slate-500">{unit}</span>
-      </div>
-      <div className="mt-3 flex items-center gap-1 text-xs text-emerald-600">
-        <ArrowDownRight size={14} />
-        <span>{change}</span>
-        <span className="text-slate-400">vs previous interval</span>
-      </div>
-    </div>
-)}
-
-
-function getStatus(cloud) {
-  if (cloud.latency > 180 || cloud.bandwidth > 90 || cloud.packetLoss > 2) {
-    return 'Critical'
-  }
-  if (cloud.latency >= 100 || cloud.bandwidth >= 80 || cloud.packetLoss >= 1) {
-    return 'Warning'
-  }
-  return 'Healthy'
-}
-
-function StatusBadge({ status }) {
-  const styles = {
-    Healthy: 'bg-emerald-50 text-emerald-700',
-    Warning: 'bg-amber-50 text-amber-700',
-    Critical: 'bg-red-50 text-red-700',
-  }
-  const dotStyles = {
-    Healthy: 'bg-emerald-500',
-    Warning: 'bg-amber-500',
-    Critical: 'bg-red-500',
-  }
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${styles[status] || styles.Healthy}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${dotStyles[status] || dotStyles.Healthy}`} />
-      {status}
-    </span>
-  )
-}
-
-function TrafficLineChart({ series, selectedProvider }) {
-  const chartWidth = 720
-  const chartHeight = 240
-  const left = 42
-  const right = 14
-  const top = 18
-  const bottom = 28
-  const plotWidth = chartWidth - left - right
-  const plotHeight = chartHeight - top - bottom
-  const maxValue = 1200
-  const colors = { AWS: '#2563eb', Azure: '#7c3aed', GCP: '#059669' }
-  const names = selectedProvider === 'All Providers' ? ['AWS', 'Azure', 'GCP'] : [selectedProvider]
-  const yTicks = [0, 300, 600, 900, 1200]
-  const xFor = (index, length) => left + (length <= 1 ? 0 : (index / (length - 1)) * plotWidth)
-  const yFor = (value) => top + plotHeight - (Math.max(0, Math.min(maxValue, value)) / maxValue) * plotHeight
-
-  return (
-    <div className="w-full overflow-x-auto">
-      <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="min-w-[600px] w-full" role="img" aria-label="Simulated network traffic line chart">
-        {yTicks.map((tick) => (
-          <g key={tick}>
-            <line x1={left} x2={chartWidth - right} y1={yFor(tick)} y2={yFor(tick)} stroke="#e2e8f0" strokeDasharray="4 4" />
-            <text x={left - 8} y={yFor(tick) + 4} textAnchor="end" fontSize="11" fill="#64748b">{tick}</text>
-          </g>
-        ))}
-        {names.map((name) => {
-          const values = series[name] || []
-          const points = values.map((value, index) => `${xFor(index, values.length)},${yFor(value)}`).join(' ')
-          return (
-            <g key={name}>
-              <polyline points={points} fill="none" stroke={colors[name]} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              {values.map((value, index) => (
-                <circle key={`${name}-${index}`} cx={xFor(index, values.length)} cy={yFor(value)} r="3" fill={colors[name]}>
-                  <title>{name}: {value} Mbps</title>
-                </circle>
-              ))}
-            </g>
-          )
-        })}
-        <text x={left} y={chartHeight - 8} fontSize="11" fill="#64748b">60 sec ago</text>
-        <text x={chartWidth - right} y={chartHeight - 8} textAnchor="end" fontSize="11" fill="#64748b">Now</text>
-      </svg>
-    </div>
-  )
-}
-
+const Panel = ({ title, subtitle, children, right }) => <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-slate-900">{title}</h2>{subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}</div>{right}</div><div className="p-5">{children}</div></section>
 
 function Monitoring() {
-  const [clouds, setClouds] = useState(initialClouds)
-  const [selectedProvider, setSelectedProvider] = useState('All Providers')
-  const [lastUpdated, setLastUpdated] = useState(new Date())
+  const [clouds, setClouds] = useState(BASE_CLOUDS)
+  const [provider, setProvider] = useState('All Providers')
+  const [running, setRunning] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [history, setHistory] = useState([35, 42, 38, 55, 47, 62, 58, 65, 52, 70, 64, 68])
-  const [trafficHistory, setTrafficHistory] = useState({ AWS: [520, 560, 480, 610, 590, 640, 700, 660, 720, 680, 740, 710], Azure: [380, 420, 460, 440, 500, 480, 520, 560, 540, 590, 610, 580], GCP: [610, 580, 640, 690, 660, 720, 740, 710, 780, 760, 820, 790] })
-  const [performanceHistory, setPerformanceHistory] = useState(createInitialPerformanceHistory)
-  const [analyticsRange, setAnalyticsRange] = useState(12)
-  const [alertHistory, setAlertHistory] = useState([])
-  const previousStatuses = useRef(Object.fromEntries(initialClouds.map((cloud) => [cloud.name, getStatus(cloud)])))
-
-  const filteredClouds =
-    selectedProvider === 'All Providers'
-      ? clouds
-      : clouds.filter((cloud) => cloud.name === selectedProvider)
-
-  const totalNodes = filteredClouds.reduce((sum, cloud) => sum + cloud.nodes, 0)
-  const avgLatency = filteredClouds.length
-    ? Math.round(filteredClouds.reduce((sum, cloud) => sum + cloud.latency, 0) / filteredClouds.length)
-    : 0
-  const avgBandwidth = filteredClouds.length
-    ? Math.round(filteredClouds.reduce((sum, cloud) => sum + cloud.bandwidth, 0) / filteredClouds.length)
-    : 0
-  const avgPacketLoss = filteredClouds.length
-    ? (filteredClouds.reduce((sum, cloud) => sum + cloud.packetLoss, 0) / filteredClouds.length).toFixed(1)
-    : '0.0'
-  const providerAlerts = filteredClouds.flatMap((cloud) => {
-    const status = getStatus(cloud)
-    if (status === 'Healthy') return []
-    const reasons = []
-    if (cloud.latency >= 100) reasons.push(`Latency is ${cloud.latency} ms`)
-    if (cloud.bandwidth >= 80) reasons.push(`Bandwidth is ${cloud.bandwidth}%`)
-    if (cloud.packetLoss >= 1) reasons.push(`Packet loss is ${cloud.packetLoss}%`)
-    return [{ provider: cloud.name, status, reasons }]
-  })
-  const warningCount = providerAlerts.filter((alert) => alert.status === 'Warning').length
-  const criticalCount = providerAlerts.filter((alert) => alert.status === 'Critical').length
-
-  useEffect(() => {
-    const newEvents = []
-    clouds.forEach((cloud) => {
-      const currentStatus = getStatus(cloud)
-      const previousStatus = previousStatuses.current[cloud.name] || 'Healthy'
-      if (currentStatus !== previousStatus) {
-        const reasons = []
-        if (cloud.latency >= 100) reasons.push(`Latency is ${cloud.latency} ms`)
-        if (cloud.bandwidth >= 80) reasons.push(`Bandwidth is ${cloud.bandwidth}%`)
-        if (cloud.packetLoss >= 1) reasons.push(`Packet loss is ${cloud.packetLoss}%`)
-        const resolved = currentStatus === 'Healthy' && previousStatus !== 'Healthy'
-        newEvents.push({
-          id: `${cloud.name}-${Date.now()}-${Math.random()}`,
-          time: new Date(),
-          provider: cloud.name,
-          severity: resolved ? 'Resolved' : currentStatus,
-          event: resolved ? `${previousStatus} condition cleared. Metrics returned to healthy levels.` : reasons.join(' · ') || `Status changed from ${previousStatus} to ${currentStatus}`,
-          transition: `${previousStatus} → ${currentStatus}`,
-        })
-      }
-      previousStatuses.current[cloud.name] = currentStatus
+  const [lastUpdated, setLastUpdated] = useState(new Date())
+  const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS)
+  const [showThresholds, setShowThresholds] = useState(false)
+  const [eventLog, setEventLog] = useState([{ id: 'initial', time: new Date(), provider: 'System', severity: 'Info', type: 'Monitoring started', message: 'Simulation monitoring session initialized.' }])
+  const [eventSearch, setEventSearch] = useState('')
+  const [eventSeverity, setEventSeverity] = useState('All')
+  const [availability, setAvailability] = useState({ AWS: 99.98, Azure: 99.95, GCP: 99.99 })
+  const [uptimeSamples, setUptimeSamples] = useState({ AWS: 0, Azure: 0, GCP: 0 })
+  const [performanceHistory, setPerformanceHistory] = useState(INITIAL_PERFORMANCE)
+  const [traffic, setTraffic] = useState({ AWS: [520, 560, 480, 610, 590, 640, 700, 660, 720, 680, 740, 710], Azure: [380, 420, 460, 440, 500, 480, 520, 560, 540, 590, 610, 580], GCP: [610, 580, 640, 690, 660, 720, 740, 710, 780, 760, 820, 790] })
+  const prevStatuses = useRef(Object.fromEntries(BASE_CLOUDS.map(c => [c.name, 'Healthy'])))
+  const filtered = provider === 'All Providers' ? clouds : clouds.filter(c => c.name === provider)
+  const totalNodes = filtered.reduce((s, c) => s + c.nodes, 0)
+  const avgLatency = filtered.length ? Math.round(filtered.reduce((s, c) => s + c.latency, 0) / filtered.length) : 0
+  const avgBandwidth = filtered.length ? Math.round(filtered.reduce((s, c) => s + c.bandwidth, 0) / filtered.length) : 0
+  const avgLoss = filtered.length ? (filtered.reduce((s, c) => s + c.packetLoss, 0) / filtered.length).toFixed(2) : '0.00'
+  const score = healthScore(filtered)
+  const providerStatuses = clouds.map(c => ({ ...c, status: statusOf(c, thresholds) }))
+  const alerts = providerStatuses.filter(c => c.status !== 'Healthy')
+  const incidentCounts = eventLog.filter(e => ['Warning', 'Critical'].includes(e.severity)).length
+  const filteredEvents = eventLog.filter(e => (eventSeverity === 'All' || e.severity === eventSeverity) && `${e.provider} ${e.type} ${e.message}`.toLowerCase().includes(eventSearch.toLowerCase()))
+  const insights = useMemo(() => {
+    const result = []
+    clouds.forEach(c => {
+      if (c.latency >= thresholds.latencyWarning) result.push(`${c.name} latency is elevated (${c.latency} ms). Consider reviewing routing or region load.`)
+      if (c.bandwidth >= thresholds.bandwidthWarning) result.push(`${c.name} bandwidth is approaching capacity (${c.bandwidth}%). Review traffic distribution.`)
+      if (c.packetLoss >= thresholds.packetWarning) result.push(`${c.name} packet loss is above the warning threshold (${c.packetLoss}%). Check network path quality.`)
     })
-    if (newEvents.length) setAlertHistory((current) => [...newEvents.reverse(), ...current].slice(0, 50))
-  }, [clouds])
-
+    if (!result.length) result.push('All simulated providers are currently within configured warning thresholds. Continue monitoring for changes.')
+    return result
+  }, [clouds, thresholds])
 
   const refreshMetrics = () => {
     setRefreshing(true)
-
-    setClouds((current) =>
-      current.map((cloud) => ({
-        ...cloud,
-        latency: randomChange(cloud.latency, 20, 220, 8),
-        bandwidth: randomChange(cloud.bandwidth, 20, 95, 4),
-        packetLoss: Number(randomChange(cloud.packetLoss, 0, 3.5, 0.2).toFixed(1)),
-      }))
-    )
-
-    setHistory((current) => [...current.slice(1), Math.round(Math.random() * 65 + 20)])
-    setTrafficHistory((current) => Object.fromEntries(Object.entries(current).map(([provider, values]) => {
-      const lastValue = values[values.length - 1] || 500
-      const nextValue = Math.max(120, Math.min(1200, lastValue + (Math.random() > 0.5 ? 1 : -1) * Math.round(Math.random() * 110 + 20)))
-      return [provider, [...values.slice(1), nextValue]]
-    })))
-    setPerformanceHistory((current) => ({
-      latency: Object.fromEntries(Object.entries(current.latency).map(([provider, values]) => {
-        const last = values[values.length - 1] ?? 50
-        const next = Math.max(10, Math.min(220, last + (Math.random() - 0.5) * 24))
-        return [provider, [...values.slice(1), Number(next.toFixed(1))]]
-      })),
-      bandwidth: Object.fromEntries(Object.entries(current.bandwidth).map(([provider, values]) => {
-        const last = values[values.length - 1] ?? 60
-        const next = Math.max(15, Math.min(95, last + (Math.random() - 0.5) * 12))
-        return [provider, [...values.slice(1), Number(next.toFixed(1))]]
-      })),
-      packetLoss: Object.fromEntries(Object.entries(current.packetLoss).map(([provider, values]) => {
-        const last = values[values.length - 1] ?? 0.2
-        const next = Math.max(0, Math.min(3.5, last + (Math.random() - 0.5) * 0.5))
-        return [provider, [...values.slice(1), Number(next.toFixed(2))]]
-      })),
-    }))
+    setClouds(current => current.map(c => ({ ...c, latency: Math.max(15, Math.min(220, c.latency + (Math.random() > .5 ? 1 : -1) * Math.round(Math.random() * 18 + 3))), bandwidth: Math.max(20, Math.min(95, c.bandwidth + (Math.random() > .5 ? 1 : -1) * Math.round(Math.random() * 8 + 1))), packetLoss: Number(Math.max(0, Math.min(3.5, c.packetLoss + (Math.random() > .5 ? 1 : -1) * Number((Math.random() * .4).toFixed(1)))).toFixed(2)) })))
+    setTraffic(current => Object.fromEntries(Object.entries(current).map(([p, values]) => { const last = values.at(-1) || 500; return [p, [...values.slice(1), Math.max(100, Math.min(1200, last + (Math.random() > .5 ? 1 : -1) * Math.round(Math.random() * 100 + 20)))]] })))
+    setAvailability(current => Object.fromEntries(Object.entries(current).map(([p, value]) => [p, Math.max(99.5, Math.min(100, value + (Math.random() - .5) * .003))])))
+    setPerformanceHistory(current => Object.fromEntries(Object.entries(current).map(([metric, providers]) => [metric, Object.fromEntries(Object.entries(providers).map(([p, values]) => { const last=values.at(-1) ?? 50; const wiggle=metric==='latency'?24:metric==='bandwidth'?12:.45; const ceiling=metric==='latency'?220:metric==='bandwidth'?95:3.5; const next=Math.max(0,Math.min(ceiling,last+(Math.random()-.5)*wiggle)); return [p,[...values.slice(1),Number(next.toFixed(2))]] }))])))
+    setUptimeSamples(current => Object.fromEntries(Object.entries(current).map(([p, n]) => [p, n + 1])))
     setLastUpdated(new Date())
-
-    setTimeout(() => setRefreshing(false), 500)
+    setRefreshing(false)
   }
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      refreshMetrics()
+    const timer = setInterval(() => {
+      if (!running) return
+      const snapshot = clouds
+      const updates = []
+      snapshot.forEach(c => {
+        const current = statusOf(c, thresholds)
+        const previous = prevStatuses.current[c.name] || 'Healthy'
+        if (current !== previous) {
+          const severity = current === 'Healthy' ? 'Resolved' : current
+          updates.push({ id: `${c.name}-${Date.now()}-${Math.random()}`, time: new Date(), provider: c.name, severity, type: current === 'Healthy' ? 'Incident resolved' : `${current} incident detected`, message: `Status changed ${previous} → ${current}. Latency ${c.latency} ms, bandwidth ${c.bandwidth}%, packet loss ${c.packetLoss}%.` })
+          prevStatuses.current[c.name] = current
+        }
+        const anomaly = c.latency > 1.7 * 56 || c.bandwidth > 90 || c.packetLoss > 1.5
+        if (anomaly) updates.push({ id: `${c.name}-anomaly-${Date.now()}-${Math.random()}`, time: new Date(), provider: c.name, severity: current === 'Critical' ? 'Critical' : 'Warning', type: 'Rule-based anomaly', message: `Potential anomaly: latency ${c.latency} ms, bandwidth ${c.bandwidth}%, packet loss ${c.packetLoss}%.` })
+      })
+      if (updates.length) setEventLog(current => [...updates.reverse(), ...current].slice(0, 200))
     }, 5000)
+    return () => clearInterval(timer)
+  }, [clouds, thresholds, running])
 
+  useEffect(() => {
+    if (!running) return undefined
+    const interval = setInterval(refreshMetrics, 5000)
     return () => clearInterval(interval)
-  }, [])
+  }, [running])
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Infrastructure Monitoring</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Monitor multi-cloud infrastructure health and network performance.
-          </p>
-        </div>
+  const trendFor = (c, key) => {
+    const original = BASE_CLOUDS.find(x => x.name === c.name)?.[key] ?? c[key]
+    const delta = Number((c[key] - original).toFixed(1))
+    const improving = key === 'latency' || key === 'packetLoss' ? delta <= 0 : delta <= 0
+    return <span className={`inline-flex items-center gap-1 text-xs ${improving ? 'text-emerald-600' : 'text-amber-600'}`}>{improving ? <TrendingDown size={13}/> : <TrendingUp size={13}/>} {delta > 0 ? '+' : ''}{delta}</span>
+  }
 
-        <button
-          onClick={refreshMetrics}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-        >
-          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-          Refresh Metrics
-        </button>
-      </div>
-
-      {/* Simulation notice */}
-      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
-        <Activity size={18} className="mt-0.5 text-blue-600" />
-        <div>
-          <p className="text-sm font-semibold text-blue-800">Simulation Mode</p>
-          <p className="mt-1 text-xs text-blue-700">
-            Monitoring metrics are simulated for demonstration purposes. No real cloud resources are being monitored.
-          </p>
-        </div>
-      </div>
-
-      {/* Provider Filter */}
-      <div className="flex flex-wrap gap-2">
-        {providers.map((provider) => (
-          <button
-            key={provider}
-            onClick={() => setSelectedProvider(provider)}
-            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-              selectedProvider === provider
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            {provider}
-          </button>
-        ))}
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          title="Active Nodes"
-          value={totalNodes}
-          unit="nodes"
-          icon={Server}
-          change="Stable"
-          color="bg-blue-50 text-blue-600"
-        />
-        <MetricCard
-          title="Average Latency"
-          value={avgLatency}
-          unit="ms"
-          icon={Zap}
-          change="Live simulated"
-          color="bg-violet-50 text-violet-600"
-        />
-        <MetricCard
-          title="Bandwidth Usage"
-          value={avgBandwidth}
-          unit="%"
-          icon={Wifi}
-          change="Live simulated"
-          color="bg-cyan-50 text-cyan-600"
-        />
-        <MetricCard
-          title="Packet Loss"
-          value={avgPacketLoss}
-          unit="%"
-          icon={Gauge}
-          change="Live simulated"
-          color="bg-amber-50 text-amber-600"
-        />
-      </div>
-
-      {/* Smart Health Alerts */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-semibold text-slate-900">Smart Health Alerts</h2>
-            <p className="mt-1 text-xs text-slate-500">Alerts are calculated from the current simulated metrics and thresholds.</p>
+  return <div className="space-y-6">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h1 className="text-2xl font-bold text-slate-900">Infrastructure Monitoring</h1><p className="mt-1 text-sm text-slate-500">Monitor multi-cloud infrastructure health and network performance.</p></div><div className="flex flex-wrap gap-2"><button onClick={() => setRunning(v => !v)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-sm">{running ? <Pause size={16}/> : <Play size={16}/>} {running ? 'Pause' : 'Resume'} Monitoring</button><button onClick={refreshMetrics} disabled={refreshing} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"><RefreshCw size={16} className={refreshing ? 'animate-spin' : ''}/> Refresh</button></div></div>
+    <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4"><Activity size={18} className="mt-0.5 text-blue-600"/><div><p className="text-sm font-semibold text-blue-800">Simulation Mode</p><p className="mt-1 text-xs text-blue-700">Metrics, alerts, availability and insights are simulated. No real cloud resources are connected.</p></div><span className={`ml-auto rounded-full px-2 py-1 text-xs font-medium ${running ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{running ? 'Monitoring active' : 'Paused'}</span></div>
+    <div className="flex flex-wrap gap-2">{PROVIDERS.map(p => <button key={p} onClick={() => setProvider(p)} className={`rounded-xl px-4 py-2 text-sm font-medium ${provider === p ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>{p}</button>)}</div>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5"><MetricCard title="Active Nodes" value={totalNodes} unit="nodes" icon={Server} sub="Across selected providers"/><MetricCard title="Average Latency" value={avgLatency} unit="ms" icon={Zap} sub="Lower is better" iconStyle="bg-violet-50 text-violet-600"/><MetricCard title="Bandwidth Usage" value={avgBandwidth} unit="%" icon={Wifi} sub="Average utilization" iconStyle="bg-cyan-50 text-cyan-600"/><MetricCard title="Packet Loss" value={avgLoss} unit="%" icon={Gauge} sub="Average loss" iconStyle="bg-amber-50 text-amber-600"/><MetricCard title="Health Score" value={score} unit="/100" icon={ShieldCheck} sub={score >= 85 ? 'Healthy overall' : score >= 65 ? 'Needs attention' : 'Poor health'} iconStyle="bg-emerald-50 text-emerald-600"/></div>
+    <Panel title="Smart Health Alerts & Incident Detection" subtitle="Rule-based incident classification using current metrics." right={<div className="flex gap-2"><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">{alerts.filter(c => c.status === 'Warning').length} Warning</span><span className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700">{alerts.filter(c => c.status === 'Critical').length} Critical</span></div>}>
+      {alerts.length ? <div className="space-y-3">{alerts.map(c => <div key={c.name} className={`flex flex-wrap items-start gap-3 rounded-xl border p-4 ${c.status === 'Critical' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}><AlertTriangle size={18} className={c.status === 'Critical' ? 'text-red-600' : 'text-amber-600'}/><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-800">{c.name}</strong><Badge status={c.status}/></div><p className="mt-1 text-xs text-slate-600">Latency {c.latency} ms · Bandwidth {c.bandwidth}% · Packet loss {c.packetLoss}%</p></div></div>)}</div> : <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700"><ShieldCheck className="mr-2 inline" size={18}/>All selected providers are within configured thresholds.</div>}
+      <div className="mt-4"><button onClick={() => setShowThresholds(v => !v)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"><SlidersHorizontal size={15}/> {showThresholds ? 'Hide' : 'Configure'} alert thresholds</button></div>
+      {showThresholds && <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(thresholds).map(([key, value]) => <label key={key} className="text-xs text-slate-600"><span className="mb-1 block">{({latencyWarning:'Latency warning (ms)',latencyCritical:'Latency critical (ms)',bandwidthWarning:'Bandwidth warning (%)',bandwidthCritical:'Bandwidth critical (%)',packetWarning:'Packet-loss warning (%)',packetCritical:'Packet-loss critical (%)'})[key]}</span><input type="number" min="0" value={value} onChange={e => setThresholds(t => ({...t, [key]: Number(e.target.value)}))} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"/></label>)}<button onClick={() => setThresholds(DEFAULT_THRESHOLDS)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">Reset defaults</button></div>}
+    </Panel>
+    <Panel title="Cloud Provider Health" subtitle="Current simulated provider health, trends and incidents.">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">{filtered.map(c => { const status = statusOf(c, thresholds); return <div key={c.name} className="rounded-xl border border-slate-200 p-4"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100"><Cloud size={20}/></div><div><h3 className="font-semibold text-slate-900">{c.name}</h3><p className="text-xs text-slate-500">{c.region}</p></div></div><Badge status={status}/></div><div className="mt-4 grid grid-cols-2 gap-3">{[['Latency',c.latency,'ms','latency'],['Bandwidth',c.bandwidth,'%','bandwidth'],['Packet Loss',c.packetLoss,'%','packetLoss'],['Active Nodes',c.nodes,'nodes','nodes']].map(([label,value,unit,key])=><div key={label} className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-lg font-semibold text-slate-800">{value} {unit}</p>{key !== 'nodes' && trendFor(c,key)}</div>)}</div><div className="mt-4"><div className="mb-1 flex justify-between text-xs text-slate-500"><span>Bandwidth capacity</span><span>{c.bandwidth}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${c.bandwidth >= thresholds.bandwidthWarning ? 'bg-amber-500' : 'bg-blue-500'}`} style={{width:`${c.bandwidth}%`}}/></div></div></div>})}</div>
+    </Panel>
+    <Panel title="Network Performance Analytics" subtitle="Historical trends for latency, bandwidth utilization and packet loss.">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        {[["latency","Latency","ms",220],["bandwidth","Bandwidth Utilization","%",100],["packetLoss","Packet Loss","%",3.5]].map(([metric,label,unit,max])=>{
+          const shown=provider==='All Providers'?['AWS','Azure','GCP']:[provider];
+          return <div key={metric} className="rounded-xl border border-slate-200 p-4">
+            <h3 className="text-sm font-semibold text-slate-800">{label}</h3>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs">{shown.map(p=><span key={p} className="flex items-center gap-1.5 text-slate-500"><span className="h-2 w-2 rounded-full" style={{background:COLORS[p]}}/>{p}</span>)}</div>
+            <div className="mt-3"><HistoryChart metric={label} series={performanceHistory[metric]} selectedProviders={shown} unit={unit} max={max}/></div>
           </div>
-          <div className="flex gap-2">
-            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">{warningCount} Warning</span>
-            <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700">{criticalCount} Critical</span>
-          </div>
-        </div>
-        <div className="p-5">
-          {providerAlerts.length === 0 ? (
-            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700">
-              <ShieldCheck size={18} /> All selected providers are within healthy thresholds.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {providerAlerts.map((alert) => (
-                <div key={alert.provider} className={`flex items-start gap-3 rounded-xl border p-4 ${alert.status === 'Critical' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
-                  <AlertTriangle size={18} className={alert.status === 'Critical' ? 'text-red-600' : 'text-amber-600'} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-slate-800">{alert.provider}</p>
-                      <StatusBadge status={alert.status} />
-                    </div>
-                    <p className="mt-1 text-xs text-slate-600">{alert.reasons.join(' · ')}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        })}
       </div>
-
-
-      {/* Alert History */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 p-5">
-          <h2 className="font-semibold text-slate-900">Alert History</h2>
-          <p className="mt-1 text-xs text-slate-500">Status changes captured during this monitoring session.</p>
-        </div>
-        {alertHistory.length === 0 ? (
-          <div className="p-5 text-sm text-slate-500">No status changes recorded yet. Alerts will appear here when a provider's health changes.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs text-slate-500">
-                <tr>
-                  <th className="px-5 py-3 font-medium">Time</th>
-                  <th className="px-5 py-3 font-medium">Provider</th>
-                  <th className="px-5 py-3 font-medium">Severity</th>
-                  <th className="px-5 py-3 font-medium">Transition</th>
-                  <th className="px-5 py-3 font-medium">Event</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {alertHistory.map((event) => (
-                  <tr key={event.id} className="hover:bg-slate-50">
-                    <td className="whitespace-nowrap px-5 py-4 text-slate-500">{event.time.toLocaleTimeString()}</td>
-                    <td className="px-5 py-4 font-medium text-slate-800">{event.provider}</td>
-                    <td className="px-5 py-4">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${event.severity === 'Critical' ? 'bg-red-50 text-red-700' : event.severity === 'Warning' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>{event.severity}</span>
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-4 text-slate-600">{event.transition}</td>
-                    <td className="px-5 py-4 text-slate-600">{event.event}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Cloud Provider Health */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 p-5">
-          <div>
-            <h2 className="font-semibold text-slate-900">Cloud Provider Health</h2>
-            <p className="mt-1 text-xs text-slate-500">Current status of simulated cloud environments</p>
-          </div>
-          <Cloud size={20} className="text-slate-400" />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-3">
-          {filteredClouds.map((cloud) => (
-            <div key={cloud.name} className="rounded-xl border border-slate-200 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
-                    <Cloud size={20} className="text-slate-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-slate-900">{cloud.name}</h3>
-                    <p className="text-xs text-slate-500">{cloud.region}</p>
-                  </div>
-                </div>
-                <StatusBadge status={getStatus(cloud)} />
-              </div>
-
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">Latency</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-800">{cloud.latency} ms</p>
-                </div>
-                <div className="rounded-lg bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">Bandwidth</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-800">{cloud.bandwidth}%</p>
-                </div>
-                <div className="rounded-lg bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">Packet Loss</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-800">{cloud.packetLoss}%</p>
-                </div>
-                <div className="rounded-lg bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">Active Nodes</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-800">{cloud.nodes}</p>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <div className="mb-1 flex justify-between text-xs text-slate-500">
-                  <span>Bandwidth capacity</span>
-                  <span>{cloud.bandwidth}%</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      cloud.bandwidth > 80 ? 'bg-amber-500' : 'bg-blue-500'
-                    }`}
-                    style={{ width: `${cloud.bandwidth}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Network Performance Analytics */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-semibold text-slate-900">Network Performance Analytics</h2>
-            <p className="mt-1 text-xs text-slate-500">Historical trends and provider comparison using simulated monitoring data.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {timeRanges.map((range) => (
-              <button key={range.points} onClick={() => setAnalyticsRange(range.points)} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${analyticsRange === range.points ? 'bg-slate-900 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                {range.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          {Object.keys(metricDefinitions).map((metric) => {
-            const config = metricDefinitions[metric]
-            const visible = selectedProvider === 'All Providers' ? ['AWS', 'Azure', 'GCP'] : [selectedProvider]
-            const selectedValues = visible.flatMap((provider) => (performanceHistory[metric][provider] || []).slice(-analyticsRange))
-            const average = selectedValues.length ? selectedValues.reduce((sum, value) => sum + value, 0) / selectedValues.length : 0
-            const peak = selectedValues.length ? Math.max(...selectedValues) : 0
-            return (
-              <div key={metric} className="rounded-xl border border-slate-200 p-4">
-                <h3 className="text-sm font-semibold text-slate-800">{config.label}</h3>
-                <div className="mt-3 flex gap-4 text-xs text-slate-500">
-                  <span>Average <strong className="text-slate-800">{average.toFixed(metric === 'packetLoss' ? 2 : 1)} {config.unit}</strong></span>
-                  <span>Peak <strong className="text-slate-800">{peak.toFixed(metric === 'packetLoss' ? 2 : 1)} {config.unit}</strong></span>
-                </div>
-                <div className="mt-3">
-                  <PerformanceLineChart metric={metric} series={performanceHistory[metric]} selectedProvider={selectedProvider} points={analyticsRange} />
-                </div>
-                <div className="mt-2 flex flex-wrap gap-3 text-[11px]">
-                  {visible.map((provider) => <span key={provider} className="inline-flex items-center gap-1.5 text-slate-500"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: providerColors[provider] }} />{provider}</span>)}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-
-      {/* Network Traffic Visualization */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-semibold text-slate-900">Network Traffic Visualization</h2>
-            <p className="mt-1 text-xs text-slate-500">Simulated traffic volume over the last 60 seconds · Mbps</p>
-          </div>
-          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            Live simulation
-          </span>
-        </div>
-        <div className="mt-5 flex flex-wrap gap-4 text-xs font-medium">
-          {(selectedProvider === 'All Providers' ? ['AWS', 'Azure', 'GCP'] : [selectedProvider]).map((name) => (
-            <span key={name} className="inline-flex items-center gap-2 text-slate-600">
-              <span className={`h-2.5 w-2.5 rounded-full ${name === 'AWS' ? 'bg-blue-600' : name === 'Azure' ? 'bg-violet-600' : 'bg-emerald-600'}`} />
-              {name}
-            </span>
-          ))}
-        </div>
-        <div className="mt-4">
-          <TrafficLineChart series={trafficHistory} selectedProvider={selectedProvider} />
-        </div>
-        <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-          <span>Traffic volume (Mbps)</span>
-          <span>Updates every 5 seconds</span>
-        </div>
-      </div>
-
-      {/* Network Performance Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 p-5">
-          <div>
-            <h2 className="font-semibold text-slate-900">Network Performance Details</h2>
-            <p className="mt-1 text-xs text-slate-500">Detailed simulated performance by cloud provider</p>
-          </div>
-          <Globe size={20} className="text-slate-400" />
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[650px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500">
-              <tr>
-                <th className="px-5 py-3 font-medium">Provider</th>
-                <th className="px-5 py-3 font-medium">Region</th>
-                <th className="px-5 py-3 font-medium">Latency</th>
-                <th className="px-5 py-3 font-medium">Bandwidth</th>
-                <th className="px-5 py-3 font-medium">Packet Loss</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredClouds.map((cloud) => (
-                <tr key={cloud.name} className="hover:bg-slate-50">
-                  <td className="px-5 py-4 font-medium text-slate-800">{cloud.name}</td>
-                  <td className="px-5 py-4 text-slate-500">{cloud.region}</td>
-                  <td className="px-5 py-4 text-slate-700">{cloud.latency} ms</td>
-                  <td className="px-5 py-4 text-slate-700">{cloud.bandwidth}%</td>
-                  <td className="px-5 py-4 text-slate-700">{cloud.packetLoss}%</td>
-                  <td className="px-5 py-4"><StatusBadge status={getStatus(cloud)} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="flex flex-col gap-2 rounded-xl bg-slate-50 p-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldCheck size={15} className="text-emerald-600" />
-          Simulation only · No real cloud connection
-        </div>
-        <div className="flex items-center gap-2">
-          <Clock size={15} />
-          Last updated: {lastUpdated.toLocaleTimeString()}
-        </div>
-      </div>
-    </div>
-  )
+    </Panel>
+    <Panel title="Availability & Uptime Analytics" subtitle="Estimated simulated availability summary (not SLA or real uptime measurement)."><div className="grid grid-cols-1 gap-4 md:grid-cols-3">{filtered.map(c=><div key={c.name} className="rounded-xl border border-slate-200 p-4"><div className="flex items-center justify-between"><strong>{c.name}</strong><CheckCircle2 size={18} className="text-emerald-500"/></div><p className="mt-3 text-2xl font-bold text-slate-900">{availability[c.name].toFixed(3)}%</p><p className="text-xs text-slate-500">Estimated availability index</p><div className="mt-3 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{width:`${availability[c.name]}%`}}/></div><p className="mt-2 text-xs text-slate-500">Simulated samples: {uptimeSamples[c.name]}</p></div>)}</div></Panel>
+    <Panel title="Insights & Recommendations" subtitle="Rule-based suggestions based on the current simulation."><div className="space-y-2">{insights.map((item,i)=><div key={i} className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><Lightbulb size={16} className="mt-0.5 shrink-0 text-amber-500"/>{item}</div>)}</div></Panel>
+    <Panel title="Network Traffic Comparison" subtitle="Last 12 simulated refresh samples (Mbps)."><div className="grid grid-cols-1 gap-4 md:grid-cols-3">{(provider === 'All Providers' ? ['AWS','Azure','GCP'] : [provider]).map(name=>{const values=traffic[name]; const peak=Math.max(...values); return <div key={name} className="rounded-xl border border-slate-200 p-4"><div className="flex justify-between"><strong>{name}</strong><span className="text-xs text-slate-500">Peak {peak} Mbps</span></div><div className="mt-4 flex h-36 items-end gap-1">{values.map((v,i)=><div key={i} title={`${v} Mbps`} className="flex-1 rounded-t bg-blue-500/80" style={{height:`${v/1200*100}%`}}/>)}</div><div className="mt-2 flex justify-between text-xs text-slate-400"><span>Older</span><span>Now</span></div></div>})}</div></Panel>
+    <Panel title="Searchable Event Log" subtitle={`Showing ${filteredEvents.length} of ${eventLog.length} simulation events.`} right={<div className="flex flex-wrap gap-2"><div className="relative"><Search size={14} className="absolute left-2 top-2.5 text-slate-400"/><input value={eventSearch} onChange={e=>setEventSearch(e.target.value)} placeholder="Search events" className="rounded-lg border border-slate-200 py-2 pl-7 pr-2 text-xs"/></div><select value={eventSeverity} onChange={e=>setEventSeverity(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-2 text-xs"><option>All</option><option>Info</option><option>Warning</option><option>Critical</option><option>Resolved</option></select></div>}>
+      {filteredEvents.length ? <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">Time</th><th className="px-4 py-3">Provider</th><th className="px-4 py-3">Severity</th><th className="px-4 py-3">Event</th><th className="px-4 py-3">Details</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredEvents.map(e=><tr key={e.id} className="hover:bg-slate-50"><td className="whitespace-nowrap px-4 py-3 text-slate-500">{fmtTime(e.time)}</td><td className="px-4 py-3 font-medium">{e.provider}</td><td className="px-4 py-3"><Badge status={e.severity}/></td><td className="px-4 py-3">{e.type}</td><td className="px-4 py-3 text-slate-600">{e.message}</td></tr>)}</tbody></table></div> : <p className="text-sm text-slate-500">No events match your search and severity filter.</p>}
+    </Panel>
+    <div className="flex flex-col gap-2 rounded-xl bg-slate-50 p-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><ShieldCheck size={15} className="text-emerald-600"/>Simulation only · No real cloud connection</div><div className="flex items-center gap-2"><Clock size={15}/>Last updated: {fmtTime(lastUpdated)} · Refresh interval: 5 seconds {running ? '(active)' : '(paused)'}</div></div>
+  </div>
 }
-
 export default Monitoring
