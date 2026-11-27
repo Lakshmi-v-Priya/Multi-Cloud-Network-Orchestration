@@ -24,6 +24,57 @@ const initialClouds = [
   { name: 'GCP', region: 'us-central1', status: 'Healthy', latency: 38, bandwidth: 72, packetLoss: 0.3, nodes: 10 },
 ]
 
+const providerColors = { AWS: '#2563eb', Azure: '#7c3aed', GCP: '#059669' }
+const metricDefinitions = {
+  latency: { label: 'Latency', unit: 'ms', color: '#2563eb', max: 240 },
+  bandwidth: { label: 'Bandwidth Utilization', unit: '%', color: '#7c3aed', max: 100 },
+  packetLoss: { label: 'Packet Loss', unit: '%', color: '#059669', max: 4 },
+}
+const timeRanges = [
+  { label: '1 Minute', points: 12 },
+  { label: '5 Minutes', points: 60 },
+  { label: '15 Minutes', points: 180 },
+]
+function seedMetricSeries(base, variance, count = 180) {
+  let value = base
+  return Array.from({ length: count }, () => {
+    value = Math.max(0, value + (Math.random() - 0.5) * variance)
+    return Number(value.toFixed(2))
+  })
+}
+function createInitialPerformanceHistory() {
+  return {
+    latency: { AWS: seedMetricSeries(42, 12), Azure: seedMetricSeries(56, 14), GCP: seedMetricSeries(38, 10) },
+    bandwidth: { AWS: seedMetricSeries(68, 8), Azure: seedMetricSeries(54, 7), GCP: seedMetricSeries(72, 9) },
+    packetLoss: { AWS: seedMetricSeries(0.2, 0.3), Azure: seedMetricSeries(0.1, 0.2), GCP: seedMetricSeries(0.3, 0.35) },
+  }
+}
+function PerformanceLineChart({ metric, series, selectedProvider, points }) {
+  const width = 720, height = 220, left = 48, right = 16, top = 16, bottom = 26
+  const plotW = width - left - right, plotH = height - top - bottom
+  const config = metricDefinitions[metric]
+  const visibleProviders = selectedProvider === 'All Providers' ? ['AWS', 'Azure', 'GCP'] : [selectedProvider]
+  const data = visibleProviders.flatMap((provider) => (series[provider] || []).slice(-points))
+  const max = metric === 'latency' ? Math.max(120, Math.ceil((Math.max(...data, 0) + 20) / 40) * 40) : config.max
+  const ticks = [0, max / 4, max / 2, max * 0.75, max]
+  const x = (i, n) => left + (n <= 1 ? 0 : i / (n - 1) * plotW)
+  const y = (v) => top + plotH - Math.max(0, Math.min(max, v)) / max * plotH
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[580px] w-full" role="img" aria-label={`${config.label} history chart`}>
+        {ticks.map((tick, index) => <g key={index}><line x1={left} x2={width - right} y1={y(tick)} y2={y(tick)} stroke="#e2e8f0" strokeDasharray="4 4" /><text x={left - 7} y={y(tick) + 4} textAnchor="end" fontSize="11" fill="#64748b">{Number(tick.toFixed(1))}</text></g>)}
+        {visibleProviders.map((provider) => {
+          const values = (series[provider] || []).slice(-points)
+          const linePoints = values.map((value, i) => `${x(i, values.length)},${y(value)}`).join(' ')
+          return <polyline key={provider} points={linePoints} fill="none" stroke={providerColors[provider]} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        })}
+        <text x={left} y={height - 7} fontSize="11" fill="#64748b">Earlier</text>
+        <text x={width - right} y={height - 7} textAnchor="end" fontSize="11" fill="#64748b">Now</text>
+      </svg>
+    </div>
+  )
+}
+
 function randomChange(value, min, max, step = 1) {
   const change = (Math.random() > 0.5 ? 1 : -1) * step
   return Math.max(min, Math.min(max, value + change))
@@ -135,6 +186,8 @@ function Monitoring() {
   const [refreshing, setRefreshing] = useState(false)
   const [history, setHistory] = useState([35, 42, 38, 55, 47, 62, 58, 65, 52, 70, 64, 68])
   const [trafficHistory, setTrafficHistory] = useState({ AWS: [520, 560, 480, 610, 590, 640, 700, 660, 720, 680, 740, 710], Azure: [380, 420, 460, 440, 500, 480, 520, 560, 540, 590, 610, 580], GCP: [610, 580, 640, 690, 660, 720, 740, 710, 780, 760, 820, 790] })
+  const [performanceHistory, setPerformanceHistory] = useState(createInitialPerformanceHistory)
+  const [analyticsRange, setAnalyticsRange] = useState(12)
   const [alertHistory, setAlertHistory] = useState([])
   const previousStatuses = useRef(Object.fromEntries(initialClouds.map((cloud) => [cloud.name, getStatus(cloud)])))
 
@@ -209,6 +262,23 @@ function Monitoring() {
       const nextValue = Math.max(120, Math.min(1200, lastValue + (Math.random() > 0.5 ? 1 : -1) * Math.round(Math.random() * 110 + 20)))
       return [provider, [...values.slice(1), nextValue]]
     })))
+    setPerformanceHistory((current) => ({
+      latency: Object.fromEntries(Object.entries(current.latency).map(([provider, values]) => {
+        const last = values[values.length - 1] ?? 50
+        const next = Math.max(10, Math.min(220, last + (Math.random() - 0.5) * 24))
+        return [provider, [...values.slice(1), Number(next.toFixed(1))]]
+      })),
+      bandwidth: Object.fromEntries(Object.entries(current.bandwidth).map(([provider, values]) => {
+        const last = values[values.length - 1] ?? 60
+        const next = Math.max(15, Math.min(95, last + (Math.random() - 0.5) * 12))
+        return [provider, [...values.slice(1), Number(next.toFixed(1))]]
+      })),
+      packetLoss: Object.fromEntries(Object.entries(current.packetLoss).map(([provider, values]) => {
+        const last = values[values.length - 1] ?? 0.2
+        const next = Math.max(0, Math.min(3.5, last + (Math.random() - 0.5) * 0.5))
+        return [provider, [...values.slice(1), Number(next.toFixed(2))]]
+      })),
+    }))
     setLastUpdated(new Date())
 
     setTimeout(() => setRefreshing(false), 500)
@@ -444,6 +514,48 @@ function Monitoring() {
           ))}
         </div>
       </div>
+
+      {/* Network Performance Analytics */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-900">Network Performance Analytics</h2>
+            <p className="mt-1 text-xs text-slate-500">Historical trends and provider comparison using simulated monitoring data.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {timeRanges.map((range) => (
+              <button key={range.points} onClick={() => setAnalyticsRange(range.points)} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${analyticsRange === range.points ? 'bg-slate-900 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                {range.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          {Object.keys(metricDefinitions).map((metric) => {
+            const config = metricDefinitions[metric]
+            const visible = selectedProvider === 'All Providers' ? ['AWS', 'Azure', 'GCP'] : [selectedProvider]
+            const selectedValues = visible.flatMap((provider) => (performanceHistory[metric][provider] || []).slice(-analyticsRange))
+            const average = selectedValues.length ? selectedValues.reduce((sum, value) => sum + value, 0) / selectedValues.length : 0
+            const peak = selectedValues.length ? Math.max(...selectedValues) : 0
+            return (
+              <div key={metric} className="rounded-xl border border-slate-200 p-4">
+                <h3 className="text-sm font-semibold text-slate-800">{config.label}</h3>
+                <div className="mt-3 flex gap-4 text-xs text-slate-500">
+                  <span>Average <strong className="text-slate-800">{average.toFixed(metric === 'packetLoss' ? 2 : 1)} {config.unit}</strong></span>
+                  <span>Peak <strong className="text-slate-800">{peak.toFixed(metric === 'packetLoss' ? 2 : 1)} {config.unit}</strong></span>
+                </div>
+                <div className="mt-3">
+                  <PerformanceLineChart metric={metric} series={performanceHistory[metric]} selectedProvider={selectedProvider} points={analyticsRange} />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-3 text-[11px]">
+                  {visible.map((provider) => <span key={provider} className="inline-flex items-center gap-1.5 text-slate-500"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: providerColors[provider] }} />{provider}</span>)}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
 
       {/* Network Traffic Visualization */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
