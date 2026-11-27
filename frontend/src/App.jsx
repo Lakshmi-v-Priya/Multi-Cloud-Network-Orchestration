@@ -14,15 +14,9 @@ import Deployment from './pages/deployments/Deployment'
 import NetworkTopology from './pages/networking/NetworkTopology'
 import Monitoring from './pages/monitoring/Monitoring'
 import Reports from './pages/reports/Reports'
+import Settings from './pages/settings/Settings'
 
-const modulePages = [
-  {
-    path: '/settings',
-    title: 'Platform Settings',
-    description:
-      'Manage platform preferences, integrations and configuration.',
-  },
-]
+const modulePages = []
 
 function App() {
   return (
@@ -57,6 +51,9 @@ function App() {
 
         {/* Deployment Preparation */}
         <Route path="/deployments" element={<Deployment />} />
+
+        {/* Platform Settings */}
+        <Route path="/settings" element={<Settings />} />
 
         {/* Other modules */}
         {modulePages.map((page) => (
