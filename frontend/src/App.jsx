@@ -13,14 +13,9 @@ import Orchestration from './pages/orchestration/Orchestration'
 import Deployment from './pages/deployments/Deployment'
 import NetworkTopology from './pages/networking/NetworkTopology'
 import Monitoring from './pages/monitoring/Monitoring'
+import Reports from './pages/reports/Reports'
 
 const modulePages = [
-  {
-    path: '/reports',
-    title: 'Reports and Analytics',
-    description:
-      'Explore cost comparisons, optimization results and infrastructure reports.',
-  },
   {
     path: '/settings',
     title: 'Platform Settings',
@@ -56,6 +51,9 @@ function App() {
 
         {/* Infrastructure Monitoring */}
         <Route path="/monitoring" element={<Monitoring />} />
+
+        {/* Reports & Analytics */}
+        <Route path="/reports" element={<Reports />} />
 
         {/* Deployment Preparation */}
         <Route path="/deployments" element={<Deployment />} />
