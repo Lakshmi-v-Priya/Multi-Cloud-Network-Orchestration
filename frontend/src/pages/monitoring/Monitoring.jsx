@@ -81,12 +81,60 @@ function StatusBadge({ status }) {
   )
 }
 
+function TrafficLineChart({ series, selectedProvider }) {
+  const chartWidth = 720
+  const chartHeight = 240
+  const left = 42
+  const right = 14
+  const top = 18
+  const bottom = 28
+  const plotWidth = chartWidth - left - right
+  const plotHeight = chartHeight - top - bottom
+  const maxValue = 1200
+  const colors = { AWS: '#2563eb', Azure: '#7c3aed', GCP: '#059669' }
+  const names = selectedProvider === 'All Providers' ? ['AWS', 'Azure', 'GCP'] : [selectedProvider]
+  const yTicks = [0, 300, 600, 900, 1200]
+  const xFor = (index, length) => left + (length <= 1 ? 0 : (index / (length - 1)) * plotWidth)
+  const yFor = (value) => top + plotHeight - (Math.max(0, Math.min(maxValue, value)) / maxValue) * plotHeight
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="min-w-[600px] w-full" role="img" aria-label="Simulated network traffic line chart">
+        {yTicks.map((tick) => (
+          <g key={tick}>
+            <line x1={left} x2={chartWidth - right} y1={yFor(tick)} y2={yFor(tick)} stroke="#e2e8f0" strokeDasharray="4 4" />
+            <text x={left - 8} y={yFor(tick) + 4} textAnchor="end" fontSize="11" fill="#64748b">{tick}</text>
+          </g>
+        ))}
+        {names.map((name) => {
+          const values = series[name] || []
+          const points = values.map((value, index) => `${xFor(index, values.length)},${yFor(value)}`).join(' ')
+          return (
+            <g key={name}>
+              <polyline points={points} fill="none" stroke={colors[name]} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              {values.map((value, index) => (
+                <circle key={`${name}-${index}`} cx={xFor(index, values.length)} cy={yFor(value)} r="3" fill={colors[name]}>
+                  <title>{name}: {value} Mbps</title>
+                </circle>
+              ))}
+            </g>
+          )
+        })}
+        <text x={left} y={chartHeight - 8} fontSize="11" fill="#64748b">60 sec ago</text>
+        <text x={chartWidth - right} y={chartHeight - 8} textAnchor="end" fontSize="11" fill="#64748b">Now</text>
+      </svg>
+    </div>
+  )
+}
+
+
 function Monitoring() {
   const [clouds, setClouds] = useState(initialClouds)
   const [selectedProvider, setSelectedProvider] = useState('All Providers')
   const [lastUpdated, setLastUpdated] = useState(new Date())
   const [refreshing, setRefreshing] = useState(false)
   const [history, setHistory] = useState([35, 42, 38, 55, 47, 62, 58, 65, 52, 70, 64, 68])
+  const [trafficHistory, setTrafficHistory] = useState({ AWS: [520, 560, 480, 610, 590, 640, 700, 660, 720, 680, 740, 710], Azure: [380, 420, 460, 440, 500, 480, 520, 560, 540, 590, 610, 580], GCP: [610, 580, 640, 690, 660, 720, 740, 710, 780, 760, 820, 790] })
   const [alertHistory, setAlertHistory] = useState([])
   const previousStatuses = useRef(Object.fromEntries(initialClouds.map((cloud) => [cloud.name, getStatus(cloud)])))
 
@@ -156,6 +204,11 @@ function Monitoring() {
     )
 
     setHistory((current) => [...current.slice(1), Math.round(Math.random() * 65 + 20)])
+    setTrafficHistory((current) => Object.fromEntries(Object.entries(current).map(([provider, values]) => {
+      const lastValue = values[values.length - 1] || 500
+      const nextValue = Math.max(120, Math.min(1200, lastValue + (Math.random() > 0.5 ? 1 : -1) * Math.round(Math.random() * 110 + 20)))
+      return [provider, [...values.slice(1), nextValue]]
+    })))
     setLastUpdated(new Date())
 
     setTimeout(() => setRefreshing(false), 500)
@@ -392,35 +445,32 @@ function Monitoring() {
         </div>
       </div>
 
-      {/* Traffic Chart */}
+      {/* Network Traffic Visualization */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-semibold text-slate-900">Network Traffic Overview</h2>
-            <p className="mt-1 text-xs text-slate-500">Simulated traffic activity · Last 12 refresh intervals</p>
+            <h2 className="font-semibold text-slate-900">Network Traffic Visualization</h2>
+            <p className="mt-1 text-xs text-slate-500">Simulated traffic volume over the last 60 seconds · Mbps</p>
           </div>
           <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            Auto-refreshing
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live simulation
           </span>
         </div>
-
-        <div className="mt-6 flex h-48 items-end gap-2">
-          {history.map((value, index) => (
-            <div key={index} className="flex flex-1 flex-col items-center gap-2">
-              <div
-                className="w-full rounded-t-md bg-blue-500/80 transition-all duration-700 hover:bg-blue-600"
-                style={{ height: `${value}%` }}
-                title={`Traffic: ${value}%`}
-              />
-              <span className="text-[10px] text-slate-400">{index + 1}</span>
-            </div>
+        <div className="mt-5 flex flex-wrap gap-4 text-xs font-medium">
+          {(selectedProvider === 'All Providers' ? ['AWS', 'Azure', 'GCP'] : [selectedProvider]).map((name) => (
+            <span key={name} className="inline-flex items-center gap-2 text-slate-600">
+              <span className={`h-2.5 w-2.5 rounded-full ${name === 'AWS' ? 'bg-blue-600' : name === 'Azure' ? 'bg-violet-600' : 'bg-emerald-600'}`} />
+              {name}
+            </span>
           ))}
         </div>
-
+        <div className="mt-4">
+          <TrafficLineChart series={trafficHistory} selectedProvider={selectedProvider} />
+        </div>
         <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-          <span>Oldest</span>
-          <span>Most recent</span>
+          <span>Traffic volume (Mbps)</span>
+          <span>Updates every 5 seconds</span>
         </div>
       </div>
 
