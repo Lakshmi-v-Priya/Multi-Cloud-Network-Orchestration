@@ -1,3 +1,4 @@
+
 import { Routes, Route, Navigate } from 'react-router-dom'
 
 import IntentForm from './pages/intents/IntentForm'
@@ -10,26 +11,10 @@ import CostAnalysis from './pages/cost-analysis/CostAnalysis'
 import Optimization from './pages/optimization/Optimization'
 import Orchestration from './pages/orchestration/Orchestration'
 import Deployment from './pages/deployments/Deployment'
+import NetworkTopology from './pages/networking/NetworkTopology'
+import Monitoring from './pages/monitoring/Monitoring'
 
 const modulePages = [
-  {
-    path: '/intents/new',
-    title: 'Intent Management',
-    description:
-      'Submit natural-language infrastructure requirements and manage your intents.',
-  },
-  {
-    path: '/networking',
-    title: 'Network Topology',
-    description:
-      'Plan network architecture and connectivity across multiple cloud providers.',
-  },
-  {
-    path: '/monitoring',
-    title: 'Infrastructure Monitoring',
-    description:
-      'Monitor infrastructure health, network performance and expenditure.',
-  },
   {
     path: '/reports',
     title: 'Reports and Analytics',
@@ -65,6 +50,12 @@ function App() {
 
         {/* Orchestration */}
         <Route path="/orchestration" element={<Orchestration />} />
+
+        {/* Network Topology */}
+        <Route path="/networking" element={<NetworkTopology />} />
+
+        {/* Infrastructure Monitoring */}
+        <Route path="/monitoring" element={<Monitoring />} />
 
         {/* Deployment Preparation */}
         <Route path="/deployments" element={<Deployment />} />
